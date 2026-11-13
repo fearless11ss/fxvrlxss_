@@ -1,8 +1,16 @@
 export type ChannelKind = "text" | "voice";
 
 export type DiscordPermission =
+  | "AddReactions"
   | "Administrator"
+  | "AttachFiles"
   | "BanMembers"
+  | "ChangeNickname"
+  | "Connect"
+  | "CreateInstantInvite"
+  | "CreatePrivateThreads"
+  | "CreatePublicThreads"
+  | "EmbedLinks"
   | "KickMembers"
   | "ManageChannels"
   | "ManageGuild"
@@ -11,6 +19,21 @@ export type DiscordPermission =
   | "ManageRoles"
   | "ModerateMembers"
   | "MoveMembers"
+  | "ReadMessageHistory"
+  | "RequestToSpeak"
+  | "SendMessages"
+  | "SendMessagesInThreads"
+  | "SendPolls"
+  | "SendVoiceMessages"
+  | "SetVoiceChannelStatus"
+  | "Speak"
+  | "Stream"
+  | "UseApplicationCommands"
+  | "UseEmbeddedActivities"
+  | "UseExternalEmojis"
+  | "UseExternalStickers"
+  | "UseVAD"
+  | "ViewChannel"
   | "ViewAuditLog";
 
 export interface BlueprintChannel {
@@ -38,11 +61,40 @@ export interface BlueprintRole {
 
 export interface GuildBlueprint {
   readonly categories: readonly BlueprintCategory[];
+  readonly everyonePermissionBits: string;
+  readonly everyonePermissions: readonly DiscordPermission[];
   readonly roles: readonly BlueprintRole[];
   readonly ungroupedChannels: readonly BlueprintChannel[];
 }
 
 export const productionGuildBlueprint: GuildBlueprint = {
+  // Preserve the complete Discord bitfield, including bit 47 which is returned
+  // by the API but is not named in the current public permission table.
+  everyonePermissionBits: "1056602794085953",
+  everyonePermissions: [
+    "CreateInstantInvite",
+    "AddReactions",
+    "Stream",
+    "ViewChannel",
+    "SendMessages",
+    "EmbedLinks",
+    "AttachFiles",
+    "ReadMessageHistory",
+    "UseExternalEmojis",
+    "Connect",
+    "Speak",
+    "UseVAD",
+    "UseApplicationCommands",
+    "RequestToSpeak",
+    "CreatePublicThreads",
+    "CreatePrivateThreads",
+    "UseExternalStickers",
+    "SendMessagesInThreads",
+    "UseEmbeddedActivities",
+    "SendVoiceMessages",
+    "SetVoiceChannelStatus",
+    "SendPolls",
+  ],
   ungroupedChannels: [
     { key: "entry", kind: "text", name: "прихожая", readOnly: true },
     { key: "rules", kind: "text", name: "правила", readOnly: true },
@@ -144,6 +196,7 @@ export const productionGuildBlueprint: GuildBlueprint = {
       hoisted: true,
       permissions: [
         "BanMembers",
+        "ChangeNickname",
         "KickMembers",
         "ManageChannels",
         "ManageMessages",
@@ -161,6 +214,7 @@ export const productionGuildBlueprint: GuildBlueprint = {
       hoisted: true,
       permissions: [
         "BanMembers",
+        "ChangeNickname",
         "KickMembers",
         "ManageMessages",
         "ManageNicknames",
@@ -173,7 +227,7 @@ export const productionGuildBlueprint: GuildBlueprint = {
       name: "Испытательный срок",
       color: "#737370",
       hoisted: true,
-      permissions: ["ManageMessages", "ModerateMembers"],
+      permissions: ["ChangeNickname", "ManageMessages", "ModerateMembers"],
     },
     {
       key: "booster",

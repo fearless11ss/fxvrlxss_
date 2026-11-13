@@ -11,6 +11,7 @@ import {
   type GuildChannelCreateOptions,
   type OverwriteResolvable,
   type PermissionResolvable,
+  PermissionsBitField,
   type Role,
 } from "discord.js";
 
@@ -24,8 +25,16 @@ export interface ReconcileAction {
 }
 
 const permissionMap = {
+  AddReactions: PermissionFlagsBits.AddReactions,
   Administrator: PermissionFlagsBits.Administrator,
+  AttachFiles: PermissionFlagsBits.AttachFiles,
   BanMembers: PermissionFlagsBits.BanMembers,
+  ChangeNickname: PermissionFlagsBits.ChangeNickname,
+  Connect: PermissionFlagsBits.Connect,
+  CreateInstantInvite: PermissionFlagsBits.CreateInstantInvite,
+  CreatePrivateThreads: PermissionFlagsBits.CreatePrivateThreads,
+  CreatePublicThreads: PermissionFlagsBits.CreatePublicThreads,
+  EmbedLinks: PermissionFlagsBits.EmbedLinks,
   KickMembers: PermissionFlagsBits.KickMembers,
   ManageChannels: PermissionFlagsBits.ManageChannels,
   ManageGuild: PermissionFlagsBits.ManageGuild,
@@ -34,8 +43,39 @@ const permissionMap = {
   ManageRoles: PermissionFlagsBits.ManageRoles,
   ModerateMembers: PermissionFlagsBits.ModerateMembers,
   MoveMembers: PermissionFlagsBits.MoveMembers,
+  ReadMessageHistory: PermissionFlagsBits.ReadMessageHistory,
+  RequestToSpeak: PermissionFlagsBits.RequestToSpeak,
+  SendMessages: PermissionFlagsBits.SendMessages,
+  SendMessagesInThreads: PermissionFlagsBits.SendMessagesInThreads,
+  SendPolls: PermissionFlagsBits.SendPolls,
+  SendVoiceMessages: PermissionFlagsBits.SendVoiceMessages,
+  SetVoiceChannelStatus: PermissionFlagsBits.SetVoiceChannelStatus,
+  Speak: PermissionFlagsBits.Speak,
+  Stream: PermissionFlagsBits.Stream,
+  UseApplicationCommands: PermissionFlagsBits.UseApplicationCommands,
+  UseEmbeddedActivities: PermissionFlagsBits.UseEmbeddedActivities,
+  UseExternalEmojis: PermissionFlagsBits.UseExternalEmojis,
+  UseExternalStickers: PermissionFlagsBits.UseExternalStickers,
+  UseVAD: PermissionFlagsBits.UseVAD,
+  ViewChannel: PermissionFlagsBits.ViewChannel,
   ViewAuditLog: PermissionFlagsBits.ViewAuditLog,
 } as const satisfies Readonly<Record<string, PermissionResolvable>>;
+
+function recordEveryonePermissions(guild: Guild, actions: ReconcileAction[]) {
+  const expected = new PermissionsBitField(
+    BigInt(productionGuildBlueprint.everyonePermissionBits),
+  );
+  const matches =
+    guild.roles.everyone.permissions.bitfield === expected.bitfield;
+  actions.push({
+    action: matches ? "preserve" : "manual",
+    kind: "role",
+    name: "@everyone",
+    reason: matches
+      ? "Baseline permissions match the recorded Discord state"
+      : "Baseline permissions differ from the recorded Discord state",
+  });
+}
 
 function findRole(guild: Guild, name: string): Role | undefined {
   return guild.roles.cache.find((role) => role.name === name);
@@ -190,12 +230,23 @@ async function createRoles(
     }
   }
 
-  actions.push({
-    action: "manual",
-    kind: "role",
-    name: "Владелец",
-    reason: "Move above the managed fxvrlxss_ role in the Discord client",
-  });
+  const owner = findRole(guild, "Владелец");
+  const bot = findRole(guild, "fxvrlxss_");
+  if (owner && bot && owner.comparePositionTo(bot) > 0) {
+    actions.push({
+      action: "preserve",
+      kind: "role",
+      name: "Владелец > fxvrlxss_",
+      reason: "Owner role hierarchy is correct",
+    });
+  } else {
+    actions.push({
+      action: "manual",
+      kind: "role",
+      name: "Владелец",
+      reason: "Move above the managed fxvrlxss_ role in the Discord client",
+    });
+  }
 }
 
 async function createChannel(
@@ -335,6 +386,7 @@ export async function reconcileGuildBlueprint(
     await Promise.all([guild.roles.fetch(), guild.channels.fetch()]);
 
     const actions: ReconcileAction[] = [];
+    recordEveryonePermissions(guild, actions);
     await createRoles(guild, mode, actions);
     if (mode === "plan") planChannels(guild, actions);
     else await createChannels(guild, mode, actions);

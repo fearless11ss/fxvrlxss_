@@ -38,4 +38,43 @@ describe("productionGuildBlueprint", () => {
     expect(botRole?.permissions).toContain("Administrator");
     expect(botRole?.managedByDiscord).toBe(true);
   });
+
+  it("preserves the staff permissions configured in Discord", () => {
+    for (const key of ["curator", "moderator", "trial"]) {
+      const role = productionGuildBlueprint.roles.find(
+        (candidate) => candidate.key === key,
+      );
+      expect(role?.permissions).toContain("ChangeNickname");
+    }
+  });
+
+  it("captures the configured @everyone baseline", () => {
+    expect(productionGuildBlueprint.everyonePermissionBits).toBe(
+      "1056602794085953",
+    );
+    expect(productionGuildBlueprint.everyonePermissions).toEqual([
+      "CreateInstantInvite",
+      "AddReactions",
+      "Stream",
+      "ViewChannel",
+      "SendMessages",
+      "EmbedLinks",
+      "AttachFiles",
+      "ReadMessageHistory",
+      "UseExternalEmojis",
+      "Connect",
+      "Speak",
+      "UseVAD",
+      "UseApplicationCommands",
+      "RequestToSpeak",
+      "CreatePublicThreads",
+      "CreatePrivateThreads",
+      "UseExternalStickers",
+      "SendMessagesInThreads",
+      "UseEmbeddedActivities",
+      "SendVoiceMessages",
+      "SetVoiceChannelStatus",
+      "SendPolls",
+    ]);
+  });
 });
