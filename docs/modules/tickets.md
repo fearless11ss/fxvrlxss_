@@ -31,8 +31,10 @@ its stable key.
 2. The bot reserves a sequential ticket number and creates a private channel.
 3. Configured staff roles can claim the ticket and add or remove participants.
 4. The author or staff can close it with a required reason.
-5. Closing stores a transcript, locks member replies, and keeps the channel for
-   review. Staff can reopen it when the published configuration allows this.
+5. Closing stores a transcript, posts a readable copy to
+   `КОМАНДА/обсуждение-обращений`, locks member replies, and keeps the channel
+   for review. Staff can reopen it when the published configuration allows
+   this.
 6. Optional inactivity handling closes untouched tickets after the configured
    number of hours. A value of `0` disables automatic closing.
 
@@ -47,7 +49,12 @@ its stable key.
 - Ticket messages are archived in the database and are excluded from the public
   custom automoderation path so evidence and support context are not removed.
 - Transcripts contain message authors, timestamps, text, and attachment
-  metadata. Discord tokens and panel credentials are never included.
+  metadata. Embeds, Components V2 data, stickers, replies, and edit timestamps
+  are preserved as well. Discord tokens and panel credentials are never
+  included.
+- Discord receives the complete transcript as UTF-8 text attachments. Large
+  histories are split across numbered files and, when necessary, multiple
+  messages so card and upload limits do not truncate their contents.
 - Dashboard changes are immutable drafts. Only the bot acknowledges a queued
   version as published after it updates the pinned Discord panel.
 

@@ -10,6 +10,9 @@ export interface GuildResources {
       readonly category: string;
       readonly openTicket: string;
     };
+    readonly team: {
+      readonly ticketDiscussions: string;
+    };
   };
   readonly roles: {
     readonly member: string;
@@ -81,6 +84,13 @@ export async function resolveGuildResources(
       support: {
         category: requireCategory(guild, "ПОДДЕРЖКА"),
         openTicket: requireTextChannel(guild, "открыть-тикет", "ПОДДЕРЖКА"),
+      },
+      team: {
+        ticketDiscussions: requireTextChannel(
+          guild,
+          "обсуждение-обращений",
+          "КОМАНДА",
+        ),
       },
     },
     roles: {

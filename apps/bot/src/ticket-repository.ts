@@ -25,9 +25,19 @@ export interface TicketTranscriptEntry {
     readonly url: string;
   }[];
   readonly authorId: string;
+  readonly authorName: string;
+  readonly components: readonly unknown[];
   readonly content: string;
   readonly createdAt: string;
+  readonly editedAt: string | null;
+  readonly embeds: readonly unknown[];
   readonly messageId: string;
+  readonly referencedMessageId: string | null;
+  readonly stickers: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly url: string;
+  }[];
 }
 
 export interface TicketRepository {

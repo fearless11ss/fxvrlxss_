@@ -6,10 +6,12 @@ import {
 } from "@fxvrlxss/domain/ticket-config";
 import {
   ActionRowBuilder,
+  AttachmentBuilder,
   ButtonBuilder,
   ButtonStyle,
   ChannelType,
   ContainerBuilder,
+  FileBuilder,
   LabelBuilder,
   MessageFlags,
   ModalBuilder,
@@ -36,6 +38,7 @@ import type {
   TicketRepository,
   TicketTranscriptEntry,
 } from "./ticket-repository.js";
+import { buildTicketTranscriptFiles } from "./ticket-transcript.js";
 
 const PANEL_SELECT_ID = "ticket:type";
 const OPEN_MODAL_PREFIX = "ticket:create:";
@@ -219,9 +222,22 @@ async function transcript(
           url: attachment.url,
         })),
         authorId: message.author.id,
+        authorName:
+          message.member?.displayName ??
+          message.author.globalName ??
+          message.author.username,
+        components: message.components.map((component) => component.toJSON()),
         content: message.content,
         createdAt: message.createdAt.toISOString(),
+        editedAt: message.editedAt?.toISOString() ?? null,
+        embeds: message.embeds.map((embed) => embed.toJSON()),
         messageId: message.id,
+        referencedMessageId: message.reference?.messageId ?? null,
+        stickers: message.stickers.map((sticker) => ({
+          id: sticker.id,
+          name: sticker.name,
+          url: sticker.url,
+        })),
       });
     }
     if (batch.size < 100) break;
@@ -731,6 +747,26 @@ export class TicketModule implements TicketConfigurationApplier {
       ],
       flags: MessageFlags.IsComponentsV2,
     });
+    if (snapshot) {
+      try {
+        await this.#publishTranscript(closed, reason, snapshot);
+      } catch (error) {
+        this.#logger.error(
+          { channelId: ticket.channelId, error },
+          "ticket transcript Discord delivery failed",
+        );
+        await this.#audit.publish({
+          category: "bot",
+          discord: true,
+          eventType: "ticket.transcript_delivery_failed",
+          payload: { error: String(error), ticketNumber: ticket.number },
+          severity: "critical",
+          subject: { id: ticket.channelId, kind: "channel" },
+          summary: `Не удалось отправить транскрипт тикета #${ticketNumber(ticket.number)} в Discord. Копия сохранена в PostgreSQL.`,
+          title: "Ошибка отправки транскрипта",
+        });
+      }
+    }
     await this.#audit.publish({
       ...(actorId ? { actor: { id: actorId, kind: "user" } as const } : {}),
       category: "bot",
@@ -741,6 +777,64 @@ export class TicketModule implements TicketConfigurationApplier {
       summary: `Закрыт тикет #${ticketNumber(ticket.number)}. Причина: ${escapeMarkdown(reason)}.`,
       title: "Тикет закрыт",
     });
+  }
+
+  async #publishTranscript(
+    ticket: TicketRecord,
+    reason: string,
+    entries: readonly TicketTranscriptEntry[],
+  ): Promise<void> {
+    const channel = await this.#textChannel(
+      this.#resources.channels.team.ticketDiscussions,
+    );
+    const type = ticketType(this.#config, ticket.type);
+    const files = buildTicketTranscriptFiles(
+      ticket,
+      {
+        closedAt: new Date(),
+        reason,
+        typeLabel: type?.label ?? ticket.type,
+      },
+      entries,
+    );
+    const batchSize = 9;
+    for (let index = 0; index < files.length; index += batchSize) {
+      const batch = files.slice(index, index + batchSize);
+      const first = index === 0;
+      const container = new ContainerBuilder()
+        .setAccentColor(0x737370)
+        .addTextDisplayComponents(
+          new TextDisplayBuilder().setContent(
+            first
+              ? [
+                  `## Транскрипт тикета #${ticketNumber(ticket.number)}`,
+                  `Тип: ${escapeMarkdown(type?.label ?? ticket.type)}`,
+                  `Автор: <@${ticket.authorId}>`,
+                  `Канал: <#${ticket.channelId}>`,
+                  `Причина закрытия: ${escapeMarkdown(reason)}`,
+                  `Сообщений: ${entries.length} · файлов: ${files.length}`,
+                ].join("\n")
+              : `## Транскрипт тикета #${ticketNumber(ticket.number)} · продолжение`,
+          ),
+        );
+      for (const file of batch) {
+        container.addFileComponents(
+          new FileBuilder().setURL(`attachment://${file.name}`),
+        );
+      }
+      await channel.send({
+        allowedMentions: { parse: [] },
+        components: [container],
+        files: batch.map(
+          (file) =>
+            new AttachmentBuilder(file.data, {
+              description: `Транскрипт тикета #${ticketNumber(ticket.number)}`,
+              name: file.name,
+            }),
+        ),
+        flags: MessageFlags.IsComponentsV2,
+      });
+    }
   }
 
   async #closeInactive(): Promise<void> {
