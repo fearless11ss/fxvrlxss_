@@ -17,6 +17,9 @@ updated: 2026-11-13
 - [x] Custom moderation domain engine and tests
 - [x] PostgreSQL foundation schema and migration
 - [x] Bot gateway and health endpoint
+- [x] Automatic member onboarding and entry lifecycle messages
+- [x] Ordered audit bus with Discord and PostgreSQL adapters
+- [x] Owner-only Components V2 status command
 - [x] Read-only Discord inventory CLI
 - [x] Dashboard visual foundation and health endpoint
 - [x] Docker Compose production topology
@@ -30,6 +33,7 @@ updated: 2026-11-13
 - [ ] Configuration drafts and atomic publication
 - [ ] Discord-native AutoMod publication adapter
 - [ ] Moderation sanctions, points, evidence, and appeals
+- [x] Split Discord log routing and full database event journal foundation
 - [ ] Ticket workflow and transcripts
 - [ ] Temporary voice-room lifecycle
 - [x] Additive staging guild blueprint reconciliation and dry-run

@@ -1,0 +1,74 @@
+import { ChannelType, type Guild } from "discord.js";
+
+export interface GuildResources {
+  readonly channels: {
+    readonly entry: string;
+    readonly logs: Readonly<
+      Record<"security" | "moderation" | "messages" | "server" | "bot", string>
+    >;
+  };
+  readonly roles: {
+    readonly member: string;
+    readonly owner: string;
+    readonly quarantine: string;
+  };
+}
+
+function requireRole(guild: Guild, name: string): string {
+  const role = guild.roles.cache.find((candidate) => candidate.name === name);
+  if (!role) throw new Error(`Required Discord role is missing: ${name}`);
+  return role.id;
+}
+
+function requireTextChannel(
+  guild: Guild,
+  name: string,
+  parentName?: string,
+): string {
+  const parent = parentName
+    ? guild.channels.cache.find(
+        (candidate) =>
+          candidate.type === ChannelType.GuildCategory &&
+          candidate.name === parentName,
+      )
+    : undefined;
+  if (parentName && !parent) {
+    throw new Error(`Required Discord category is missing: ${parentName}`);
+  }
+
+  const channel = guild.channels.cache.find(
+    (candidate) =>
+      candidate.type === ChannelType.GuildText &&
+      candidate.name === name &&
+      candidate.parentId === (parent?.id ?? null),
+  );
+  if (!channel) {
+    throw new Error(
+      `Required Discord text channel is missing: ${parentName ? `${parentName}/` : ""}${name}`,
+    );
+  }
+  return channel.id;
+}
+
+export async function resolveGuildResources(
+  guild: Guild,
+): Promise<GuildResources> {
+  await Promise.all([guild.channels.fetch(), guild.roles.fetch()]);
+  return {
+    channels: {
+      entry: requireTextChannel(guild, "прихожая"),
+      logs: {
+        security: requireTextChannel(guild, "безопасность", "ЛОГИ"),
+        moderation: requireTextChannel(guild, "модерация", "ЛОГИ"),
+        messages: requireTextChannel(guild, "сообщения", "ЛОГИ"),
+        server: requireTextChannel(guild, "сервер", "ЛОГИ"),
+        bot: requireTextChannel(guild, "бот", "ЛОГИ"),
+      },
+    },
+    roles: {
+      member: requireRole(guild, "Участник"),
+      owner: requireRole(guild, "Владелец"),
+      quarantine: requireRole(guild, "Карантин"),
+    },
+  };
+}

@@ -49,12 +49,14 @@ services:
       target: bot
     restart: unless-stopped
     environment:
+      DATABASE_URL_FILE: /run/secrets/database_url
       DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:?set DISCORD_GUILD_ID}
       DISCORD_TOKEN_FILE: /run/secrets/discord_token
       HEALTH_PORT: 3011
       LOG_LEVEL: info
       NODE_ENV: production
     secrets:
+      - database_url
       - discord_token
     depends_on:
       migrate:

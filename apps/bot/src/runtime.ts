@@ -1,16 +1,12 @@
 import { createServer, type Server } from "node:http";
 
-import { CustomModerationEngine } from "@fxvrlxss/domain/moderation";
-import {
-  Client,
-  Events,
-  GatewayIntentBits,
-  type AutoModerationActionExecution,
-  type Message,
-} from "discord.js";
+import { createDatabase } from "@fxvrlxss/database/client";
+import { Client, Events, GatewayIntentBits, Partials } from "discord.js";
 import pino, { type Logger } from "pino";
 
 import type { ResolvedBotConfig } from "./config.js";
+import { DatabaseAuditWriter } from "./database-audit.js";
+import { startGuildCore, type GuildCore } from "./guild-core.js";
 
 export interface BotRuntime {
   start(): Promise<void>;
@@ -38,27 +34,15 @@ function createHealthServer(
   });
 }
 
-function toModerationMessage(message: Message) {
-  return {
-    attachments: message.attachments.map((attachment) => ({
-      contentType: attachment.contentType,
-      name: attachment.name,
-      size: attachment.size,
-    })),
-    channelId: message.channelId,
-    content: message.content,
-    createdAt: message.createdTimestamp,
-    id: message.id,
-    userId: message.author.id,
-  };
-}
-
 export function createBotRuntime(config: ResolvedBotConfig): BotRuntime {
   const logger = pino({ level: config.LOG_LEVEL });
-  const moderation = new CustomModerationEngine();
+  const databaseState = config.DATABASE_URL
+    ? createDatabase(config.DATABASE_URL)
+    : undefined;
   const client = new Client({
     intents: [
       GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildInvites,
       GatewayIntentBits.GuildMembers,
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.GuildModeration,
@@ -67,52 +51,17 @@ export function createBotRuntime(config: ResolvedBotConfig): BotRuntime {
       GatewayIntentBits.AutoModerationConfiguration,
       GatewayIntentBits.AutoModerationExecution,
     ],
+    partials: [
+      Partials.Channel,
+      Partials.GuildMember,
+      Partials.Message,
+      Partials.User,
+    ],
   });
 
+  let core: GuildCore | undefined;
   let ready = false;
   let healthServer: Server | undefined;
-
-  client.once(Events.ClientReady, (readyClient) => {
-    ready = true;
-    logger.info(
-      { guildId: config.DISCORD_GUILD_ID, userId: readyClient.user.id },
-      "fxvrlxss_ connected",
-    );
-  });
-
-  client.on(Events.MessageCreate, (message) => {
-    if (message.author.bot || message.guildId !== config.DISCORD_GUILD_ID)
-      return;
-
-    const inspection = moderation.inspect(toModerationMessage(message));
-    if (inspection.findings.length === 0) return;
-
-    logger.info(
-      {
-        channelId: message.channelId,
-        findings: inspection.findings,
-        messageId: message.id,
-        userId: message.author.id,
-      },
-      "custom moderation signals observed",
-    );
-  });
-
-  client.on(
-    Events.AutoModerationActionExecution,
-    (execution: AutoModerationActionExecution) => {
-      if (execution.guild.id !== config.DISCORD_GUILD_ID) return;
-      logger.info(
-        {
-          actionType: execution.action.type,
-          channelId: execution.channel?.id,
-          ruleId: execution.ruleId,
-          userId: execution.userId,
-        },
-        "discord automod action observed",
-      );
-    },
-  );
 
   return {
     async start() {
@@ -121,18 +70,65 @@ export function createBotRuntime(config: ResolvedBotConfig): BotRuntime {
         () => ready,
         logger,
       );
-      await client.login(config.DISCORD_TOKEN);
+
+      if (databaseState) {
+        await databaseState.connection.unsafe("select 1");
+        logger.info("postgresql connected");
+      } else {
+        logger.warn("postgresql disabled for this local run");
+      }
+
+      const initialized = new Promise<void>((resolve, reject) => {
+        client.once(Events.ClientReady, (readyClient) => {
+          void (async () => {
+            try {
+              core = await startGuildCore({
+                client,
+                databaseConnected: Boolean(databaseState),
+                guildId: config.DISCORD_GUILD_ID,
+                logger,
+                persistentWriters: databaseState
+                  ? [new DatabaseAuditWriter(databaseState.database)]
+                  : [],
+              });
+              ready = true;
+              logger.info(
+                {
+                  guildId: config.DISCORD_GUILD_ID,
+                  userId: readyClient.user.id,
+                },
+                "fxvrlxss_ connected",
+              );
+              resolve();
+            } catch (error) {
+              reject(error instanceof Error ? error : new Error(String(error)));
+            }
+          })();
+        });
+      });
+
+      try {
+        await client.login(config.DISCORD_TOKEN);
+        await initialized;
+      } catch (error) {
+        ready = false;
+        await client.destroy();
+        throw error;
+      }
     },
     async stop() {
       ready = false;
+      await core?.stop();
       await client.destroy();
-      if (!healthServer) return;
-      await new Promise<void>((resolve, reject) => {
-        healthServer?.close((error) => {
-          if (error) reject(error);
-          else resolve();
+      if (healthServer) {
+        await new Promise<void>((resolve, reject) => {
+          healthServer?.close((error) => {
+            if (error) reject(error);
+            else resolve();
+          });
         });
-      });
+      }
+      await databaseState?.connection.end({ timeout: 5 });
     },
   };
 }

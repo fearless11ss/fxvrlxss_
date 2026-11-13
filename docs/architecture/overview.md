@@ -24,13 +24,14 @@ flowchart LR
 
 ## Modules and seams
 
-| Module                    | Interface                     | Implementation hidden behind it                |
-| ------------------------- | ----------------------------- | ---------------------------------------------- |
-| Guild blueprint           | Immutable desired guild state | Ordering, names, roles, permissions            |
-| Custom moderation         | Inspect one Discord message   | Sliding windows, normalization, thresholds     |
-| Configuration publication | Publish one validated version | Validation, audit, atomic activation           |
-| Audit journal             | Append and query events       | PostgreSQL schema, retention, filtering        |
-| Discord adapter           | Apply desired state           | Rate limits, hierarchy, retries, audit reasons |
+| Module                    | Interface                     | Implementation hidden behind it                 |
+| ------------------------- | ----------------------------- | ----------------------------------------------- |
+| Guild blueprint           | Immutable desired guild state | Ordering, names, roles, permissions             |
+| Custom moderation         | Inspect one Discord message   | Sliding windows, normalization, thresholds      |
+| Configuration publication | Publish one validated version | Validation, audit, atomic activation            |
+| Audit journal             | Append and query events       | PostgreSQL schema, retention, filtering         |
+| Audit dispatch            | Publish one ordered event     | Discord routing, persistence, failure isolation |
+| Discord adapter           | Apply desired state           | Rate limits, hierarchy, retries, audit reasons  |
 
 The pure domain package contains policy and desired state. Discord and
 PostgreSQL are adapters at explicit seams, not dependencies of the policy.

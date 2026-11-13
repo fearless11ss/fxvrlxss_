@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { z } from "zod";
 
 const environmentSchema = z.object({
+  DATABASE_URL: z.string().min(1).optional(),
+  DATABASE_URL_FILE: z.string().min(1).optional(),
   DISCORD_GUILD_ID: z.string().min(1),
   DISCORD_TOKEN: z.string().min(1).optional(),
   DISCORD_TOKEN_FILE: z.string().min(1).optional(),
@@ -19,7 +21,7 @@ export type BotConfig = z.infer<typeof environmentSchema>;
 
 export type ResolvedBotConfig = Omit<
   BotConfig,
-  "DISCORD_TOKEN" | "DISCORD_TOKEN_FILE"
+  "DATABASE_URL_FILE" | "DISCORD_TOKEN" | "DISCORD_TOKEN_FILE"
 > & {
   readonly DISCORD_TOKEN: string;
 };
@@ -33,13 +35,33 @@ function resolveSecret(
   throw new Error("DISCORD_TOKEN or DISCORD_TOKEN_FILE is required");
 }
 
+function resolveOptionalSecret(
+  value: string | undefined,
+  file: string | undefined,
+): string | undefined {
+  if (value) return value;
+  if (file) return readFileSync(file, "utf8").trim();
+  return undefined;
+}
+
 export function loadBotConfig(
   environment: NodeJS.ProcessEnv = process.env,
 ): ResolvedBotConfig {
   const parsed = environmentSchema.parse(environment);
-  const { DISCORD_TOKEN_FILE, ...config } = parsed;
+  const { DATABASE_URL_FILE, DISCORD_TOKEN_FILE, ...config } = parsed;
+  const databaseUrl = resolveOptionalSecret(
+    parsed.DATABASE_URL,
+    DATABASE_URL_FILE,
+  );
+  if (parsed.NODE_ENV === "production" && !databaseUrl) {
+    throw new Error(
+      "DATABASE_URL or DATABASE_URL_FILE is required in production",
+    );
+  }
+
   return {
     ...config,
+    ...(databaseUrl ? { DATABASE_URL: databaseUrl } : {}),
     DISCORD_TOKEN: resolveSecret(parsed.DISCORD_TOKEN, DISCORD_TOKEN_FILE),
   };
 }

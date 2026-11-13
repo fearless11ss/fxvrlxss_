@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@fxvrlxss/database": "*",
     "@fxvrlxss/domain": "*",
     "discord.js": "14.28.1",
     "pino": "10.4.0",
