@@ -4,7 +4,7 @@ tags:
   - fxvrlxss
   - status
 status: active
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # Implementation status
@@ -21,7 +21,7 @@ updated: 2026-11-12
 - [x] Dashboard visual foundation and health endpoint
 - [x] Docker Compose production topology
 - [x] CI checks for docs, formatting, lint, types, tests, and build
-- [ ] Private GitHub remote
+- [x] Private GitHub remote
 - [ ] Ubuntu container smoke-test
 
 ## Product modules
@@ -32,12 +32,13 @@ updated: 2026-11-12
 - [ ] Moderation sanctions, points, evidence, and appeals
 - [ ] Ticket workflow and transcripts
 - [ ] Temporary voice-room lifecycle
-- [ ] Guild reconciliation and destructive cleanup dry-run
+- [x] Additive staging guild blueprint reconciliation and dry-run
+- [ ] Destructive production cleanup dry-run
 
 ## Launch
 
 - [ ] Original brand asset set
-- [ ] Test guild verification
+- [x] Test guild blueprint applied and verified idempotent
 - [ ] Tailscale and VPS hardening
 - [ ] Production guild cutover
 - [ ] Seven-day observation period

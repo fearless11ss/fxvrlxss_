@@ -39,3 +39,24 @@ environment blocks.
 Encrypted PostgreSQL backups are stored outside the VPS: seven daily, four
 weekly, and six monthly snapshots. Restore verification is part of operations,
 not an assumed property of a backup file.
+
+## Staging guild blueprint
+
+Inspect the guild before any mutation:
+
+```bash
+npm run dev -w @fxvrlxss/ops-cli -- inventory
+npm run dev -w @fxvrlxss/ops-cli -- blueprint-plan
+```
+
+The additive reconciler never deletes channels or roles. Applying it is limited
+to `DISCORD_ENVIRONMENT=staging` and requires an exact guild-bound confirmation:
+
+```bash
+npm run dev -w @fxvrlxss/ops-cli -- blueprint-apply \
+  --confirm=APPLY_BLUEPRINT_<guild-id>
+```
+
+Discord-managed roles are preserved. The server owner must manually place and
+assign `Владелец` above the bot's managed role because a bot cannot raise a role
+above its own highest role.
