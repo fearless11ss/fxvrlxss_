@@ -158,9 +158,26 @@ async function sendLifecycleMessage(
   if (!channel?.isSendable()) {
     throw new Error("Entry channel is not sendable");
   }
-  await channel.send({
-    allowedMentions: kind === "joined" ? { users: [userId] } : { parse: [] },
+  if (kind === "left") {
+    await channel.send({
+      allowedMentions: { parse: [] },
+      components: buildLifecycleComponents(kind, userId),
+      flags: MessageFlags.IsComponentsV2,
+    });
+    return;
+  }
+
+  // Mentions inside Components V2 are visual only. Send ordinary content so
+  // Discord creates the notification, then convert the same message to V2.
+  const welcome = await channel.send({
+    allowedMentions: { users: [userId] },
+    content: `<@${userId}>`,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 750));
+  await welcome.edit({
+    allowedMentions: { parse: [] },
     components: buildLifecycleComponents(kind, userId),
+    content: null,
     flags: MessageFlags.IsComponentsV2,
   });
 }
