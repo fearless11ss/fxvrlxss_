@@ -1,4 +1,3 @@
-import { CustomModerationEngine } from "@fxvrlxss/domain/moderation";
 import {
   Events,
   MessageFlags,
@@ -15,11 +14,15 @@ import type { Logger } from "pino";
 
 import { AuditBus, type AuditWriter } from "./audit.js";
 import { AsyncEventGate } from "./async-event-gate.js";
+import type { AutomodPublicationRepository } from "./automod-publication.js";
+import { AutomodPublicationWorker } from "./automod-publication.js";
+import { AutomodRuntime } from "./automod-runtime.js";
 import {
   buildLifecycleComponents,
   buildStatusComponents,
   DiscordAuditWriter,
 } from "./discord-messages.js";
+import { DiscordAutomodAdapter } from "./discord-automod.js";
 import {
   resolveGuildResources,
   type GuildResources,
@@ -31,11 +34,48 @@ export interface GuildCore {
 }
 
 export interface GuildCoreOptions {
+  readonly automodPublicationRepository?: AutomodPublicationRepository;
   readonly client: Client;
   readonly databaseConnected: boolean;
   readonly guildId: string;
   readonly logger: Logger;
   readonly persistentWriters?: readonly AuditWriter[];
+}
+
+function isAutomodExempt(message: Message, runtime: AutomodRuntime): boolean {
+  const member = message.member;
+  return (
+    runtime.config.exemptChannelIds.includes(message.channelId) ||
+    Boolean(
+      member?.permissions.has(PermissionFlagsBits.Administrator) ||
+      member?.permissions.has(PermissionFlagsBits.ManageMessages) ||
+      member?.roles.cache.some((role) =>
+        runtime.config.exemptRoleIds.includes(role.id),
+      ),
+    )
+  );
+}
+
+async function applyCustomSanction(
+  message: Message,
+  action: "delete" | "quarantine" | "timeout",
+  timeoutMinutes: number,
+  quarantineRoleId: string,
+) {
+  const reason = `fxvrlxss_ automod: ${action}`;
+  if (message.deletable) await message.delete();
+  if (action === "timeout") {
+    if (!message.member?.moderatable) {
+      throw new Error("Matched member cannot be timed out by the bot");
+    }
+    await message.member.timeout(timeoutMinutes * 60_000, reason);
+  }
+  if (action === "quarantine") {
+    if (!message.member?.manageable) {
+      throw new Error("Matched member cannot be quarantined by the bot");
+    }
+    await message.member.roles.add(quarantineRoleId, reason);
+  }
 }
 
 function toModerationMessage(message: Message) {
@@ -130,16 +170,29 @@ export async function startGuildCore(
   };
   const guild = await client.guilds.fetch(guildId);
   const resources = await resolveGuildResources(guild);
+  const automodRuntime = new AutomodRuntime();
+  const discordAutomod = new DiscordAutomodAdapter(
+    guild,
+    resources,
+    automodRuntime,
+  );
+  const publicationWorker = options.automodPublicationRepository
+    ? new AutomodPublicationWorker({
+        applier: discordAutomod,
+        logger,
+        repository: options.automodPublicationRepository,
+      })
+    : undefined;
   const discordWriter = new DiscordAuditWriter(client, resources);
   const audit = new AuditBus(
     guildId,
     [...(options.persistentWriters ?? []), discordWriter],
     logger,
   );
-  const moderation = new CustomModerationEngine();
   const startedAt = new Date();
 
   await registerStatusCommand(guild);
+  await publicationWorker?.start();
 
   safeOn(Events.GuildMemberAdd, async (member) => {
     if (member.guild.id !== guildId || member.user.bot) return;
@@ -258,9 +311,9 @@ export async function startGuildCore(
       title: "Создано сообщение",
     });
 
-    if (message.author.bot) return;
-    const inspection = moderation.inspect(toModerationMessage(message));
-    if (inspection.findings.length === 0) return;
+    if (message.author.bot || isAutomodExempt(message, automodRuntime)) return;
+    const decision = automodRuntime.inspect(toModerationMessage(message));
+    if (decision.findings.length === 0) return;
     await audit.publish({
       actorId: message.author.id,
       category: "security",
@@ -268,14 +321,51 @@ export async function startGuildCore(
       eventType: "moderation.signals_observed",
       payload: {
         channelId: message.channelId,
-        findings: inspection.findings,
+        action: decision.action,
+        findings: decision.findings,
         messageId: message.id,
       },
       severity: "warning",
       subjectId: message.id,
-      summary: `Обнаружено сигналов: ${inspection.findings.length}. Наказание пока не применялось.`,
+      summary: `Обнаружено сигналов: ${decision.findings.length}. Действие: ${decision.action}.`,
       title: "Сигналы автомодерации",
     });
+    if (decision.action === "observe") return;
+    try {
+      await applyCustomSanction(
+        message,
+        decision.action,
+        decision.timeoutMinutes,
+        resources.roles.quarantine,
+      );
+      await audit.publish({
+        actorId: message.author.id,
+        category: "moderation",
+        discord: true,
+        eventType: "moderation.action_applied",
+        payload: {
+          action: decision.action,
+          findings: decision.findings,
+          messageId: message.id,
+        },
+        severity: "warning",
+        subjectId: message.author.id,
+        summary: `Применено действие: ${decision.action}.`,
+        title: "Автомодерация применила действие",
+      });
+    } catch (error) {
+      await audit.publish({
+        actorId: message.author.id,
+        category: "bot",
+        discord: true,
+        eventType: "moderation.action_failed",
+        payload: { action: decision.action, error: String(error) },
+        severity: "critical",
+        subjectId: message.author.id,
+        summary: "Не удалось применить действие автомодерации.",
+        title: "Ошибка автомодерации",
+      });
+    }
   });
 
   safeOn(Events.MessageUpdate, async (before, after) => {
@@ -361,6 +451,18 @@ export async function startGuildCore(
 
   safeOn(Events.AutoModerationActionExecution, async (execution) => {
     if (execution.guild.id !== guildId) return;
+    if (
+      discordAutomod.isManagedInviteRule(execution.ruleId) &&
+      automodRuntime.config.enabled &&
+      automodRuntime.config.mode === "enforce" &&
+      automodRuntime.config.inviteLinks.action === "quarantine"
+    ) {
+      const member = await guild.members.fetch(execution.userId);
+      await member.roles.add(
+        resources.roles.quarantine,
+        "fxvrlxss_ Discord invite automod",
+      );
+    }
     await audit.publish({
       category: "moderation",
       discord: true,
@@ -590,6 +692,7 @@ export async function startGuildCore(
   return {
     audit,
     async stop() {
+      await publicationWorker?.stop();
       await eventGate.close();
       await audit.publish({
         category: "bot",

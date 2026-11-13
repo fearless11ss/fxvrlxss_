@@ -13,8 +13,8 @@ Detection ownership is intentionally non-overlapping.
 
 ## Discord-native detection
 
-- keyword and regex rules;
-- Discord invite patterns;
+- Discord invite patterns (implemented);
+- keyword and regex rules (planned);
 - mention spam and mention raids;
 - generic spam filter;
 - member profile terms;
@@ -30,7 +30,7 @@ and appeal links.
 - repeated messages;
 - excessive capital letters;
 - emoji spam;
-- attachment frequency, MIME type, and file signature;
+- attachment frequency, MIME type, and file extension;
 - join-rate raids and quarantine.
 
 ## Invariants
@@ -42,4 +42,24 @@ and appeal links.
 - Ordinary untouched messages are archived only in PostgreSQL. Discord receives
   message edits, deletions, moderation signals, and other actionable events.
 - Dashboard edits create immutable versioned drafts; publishing remains disabled
-  until the Discord AutoMod adapter is implemented.
+  until the owner explicitly submits a draft.
+- Publication moves a draft to `queued`; only the bot, which owns the Discord
+  token, can acknowledge it as `published` after both native and custom rules
+  have been applied. Failures are stored as `failed` with a visible reason.
+- The bot polls at most one queued version at a time. The previously published
+  version becomes `superseded` only after the replacement is applied.
+
+## Current publication mapping
+
+| Dashboard rule       | Enforcement owner |
+| -------------------- | ----------------- |
+| Discord invitations  | Discord AutoMod   |
+| Flood                | Bot runtime       |
+| Repeated messages    | Bot runtime       |
+| Capital letters      | Bot runtime       |
+| Emoji spam           | Bot runtime       |
+| Attachment type/rate | Bot runtime       |
+
+The global observation mode reports matches without punishment. Enforcement
+mode supports deletion, timeout, and the quarantine role. Administrator,
+Manage Messages, and explicitly exempted roles/channels bypass custom checks.

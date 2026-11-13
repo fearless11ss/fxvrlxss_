@@ -22,7 +22,9 @@ const timestamps = {
 
 export const publicationStatus = pgEnum("publication_status", [
   "draft",
+  "queued",
   "published",
+  "failed",
   "superseded",
 ]);
 export const moderationCaseStatus = pgEnum("moderation_case_status", [
@@ -46,6 +48,7 @@ export const configurationVersions = pgTable(
     status: publicationStatus("status").default("draft").notNull(),
     payload: jsonb("payload").notNull(),
     createdBy: text("created_by").notNull(),
+    failureReason: text("failure_reason"),
     publishedAt: timestamp("published_at", { withTimezone: true }),
     ...timestamps,
   },

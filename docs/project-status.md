@@ -31,8 +31,9 @@ updated: 2026-11-13
 
 - [x] Single-owner password, TOTP, sessions, and brute-force protection
 - [x] Versioned automoderation drafts
-- [ ] Atomic configuration publication
-- [ ] Discord-native AutoMod publication adapter
+- [x] Acknowledged configuration publication through PostgreSQL
+- [x] Discord-native invitation AutoMod publication adapter
+- [x] Custom message-rule runtime with delete, timeout, and quarantine actions
 - [ ] Moderation sanctions, points, evidence, and appeals
 - [x] Split Discord log routing and full database event journal foundation
 - [ ] Ticket workflow and transcripts

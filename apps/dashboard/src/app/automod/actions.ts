@@ -4,12 +4,18 @@ import { auditEvents, configurationVersions } from "@fxvrlxss/database/schema";
 import { automodConfigSchema } from "@fxvrlxss/domain/automod-config";
 import { and, eq, max } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
 import { requireOwnerSession } from "../../lib/auth";
 import { getDatabase } from "../../lib/database";
 import { getDashboardEnvironment } from "../../lib/environment";
 
 export interface SaveAutomodState {
+  readonly error?: string;
+  readonly message?: string;
+}
+
+export interface PublishAutomodState {
   readonly error?: string;
   readonly message?: string;
 }
@@ -43,6 +49,8 @@ export async function saveAutomodDraft(
       allowImages: enabled(formData, "allowImages"),
       allowVideo: enabled(formData, "allowVideo"),
       enabled: enabled(formData, "attachmentEnabled"),
+      maximumPerWindow: numberValue(formData, "attachmentMaximumPerWindow"),
+      windowSeconds: numberValue(formData, "attachmentWindowSeconds"),
     },
     caps: {
       action: formData.get("capsAction"),
@@ -75,6 +83,7 @@ export async function saveAutomodDraft(
       maximumRepeats: numberValue(formData, "repeatedMaximumRepeats"),
       windowSeconds: numberValue(formData, "repeatedWindowSeconds"),
     },
+    timeoutMinutes: numberValue(formData, "timeoutMinutes"),
   });
   if (!parsed.success) {
     return { error: "Проверьте пороги и выбранные действия." };
@@ -115,4 +124,62 @@ export async function saveAutomodDraft(
   });
   revalidatePath("/automod");
   return { message: `Черновик версии ${nextVersion} сохранён.` };
+}
+
+export async function publishAutomodDraft(
+  _state: PublishAutomodState,
+  formData: FormData,
+): Promise<PublishAutomodState> {
+  const session = await requireOwnerSession();
+  const parsedVersion = z.coerce
+    .number()
+    .int()
+    .positive()
+    .safeParse(formData.get("version"));
+  if (!parsedVersion.success) return { error: "Сначала сохраните черновик." };
+
+  const database = getDatabase();
+  const environment = getDashboardEnvironment();
+  const queued = await database
+    .select({ id: configurationVersions.id })
+    .from(configurationVersions)
+    .where(
+      and(
+        eq(configurationVersions.module, "automod"),
+        eq(configurationVersions.status, "queued"),
+      ),
+    )
+    .limit(1);
+  if (queued.length > 0) {
+    return { error: "Предыдущая версия ещё применяется ботом." };
+  }
+
+  const updated = await database.transaction(async (transaction) => {
+    const rows = await transaction
+      .update(configurationVersions)
+      .set({ failureReason: null, status: "queued", updatedAt: new Date() })
+      .where(
+        and(
+          eq(configurationVersions.module, "automod"),
+          eq(configurationVersions.version, parsedVersion.data),
+          eq(configurationVersions.status, "draft"),
+        ),
+      )
+      .returning({ id: configurationVersions.id });
+    if (rows.length === 0) return false;
+    await transaction.insert(auditEvents).values({
+      actorId: session.accountId,
+      actorType: "owner",
+      category: "bot",
+      eventType: "configuration.automod_queued",
+      guildId: environment.guildId,
+      payload: { version: parsedVersion.data },
+    });
+    return true;
+  });
+  if (!updated) {
+    return { error: "Черновик изменился. Обновите страницу и повторите." };
+  }
+  revalidatePath("/automod");
+  return { message: `Версия ${parsedVersion.data} передана боту.` };
 }

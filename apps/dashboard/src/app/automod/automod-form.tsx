@@ -51,6 +51,16 @@ export function AutomodForm({ config }: Readonly<{ config: AutomodConfig }>) {
             <option value="enforce">Применение наказаний</option>
           </select>
         </label>
+        <label>
+          <span>Тайм-аут, минут</span>
+          <input
+            defaultValue={config.timeoutMinutes}
+            min="1"
+            max="40320"
+            name="timeoutMinutes"
+            type="number"
+          />
+        </label>
       </section>
 
       <div className="ruleGrid">
@@ -246,6 +256,26 @@ export function AutomodForm({ config }: Readonly<{ config: AutomodConfig }>) {
               Видео
             </label>
           </div>
+          <label>
+            <span>Максимум вложений</span>
+            <input
+              defaultValue={config.attachmentPolicy.maximumPerWindow}
+              min="1"
+              max="50"
+              name="attachmentMaximumPerWindow"
+              type="number"
+            />
+          </label>
+          <label>
+            <span>За секунд</span>
+            <input
+              defaultValue={config.attachmentPolicy.windowSeconds}
+              min="5"
+              max="300"
+              name="attachmentWindowSeconds"
+              type="number"
+            />
+          </label>
           <label>
             <span>Действие</span>
             <ActionSelect

@@ -6,34 +6,39 @@ import {
   defaultAutomodConfig,
   type AutomodConfig,
 } from "@fxvrlxss/domain/automod-config";
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 
 import { getDatabase } from "../../lib/database";
 
-export interface AutomodDraft {
+export type AutomodPublicationStatus =
+  "draft" | "failed" | "new" | "published" | "queued" | "superseded";
+
+export interface AutomodSnapshot {
   readonly config: AutomodConfig;
+  readonly failureReason?: string;
+  readonly status: AutomodPublicationStatus;
   readonly version: number;
 }
 
-export async function getAutomodDraft(): Promise<AutomodDraft> {
+export async function getAutomodSnapshot(): Promise<AutomodSnapshot> {
   const rows = await getDatabase()
     .select({
+      failureReason: configurationVersions.failureReason,
       payload: configurationVersions.payload,
+      status: configurationVersions.status,
       version: configurationVersions.version,
     })
     .from(configurationVersions)
-    .where(
-      and(
-        eq(configurationVersions.module, "automod"),
-        eq(configurationVersions.status, "draft"),
-      ),
-    )
+    .where(eq(configurationVersions.module, "automod"))
     .orderBy(desc(configurationVersions.version))
     .limit(1);
   const row = rows[0];
-  if (!row) return { config: defaultAutomodConfig, version: 0 };
+  if (!row) return { config: defaultAutomodConfig, status: "new", version: 0 };
   const parsed = automodConfigSchema.safeParse(row.payload);
-  return parsed.success
-    ? { config: parsed.data, version: row.version }
-    : { config: defaultAutomodConfig, version: row.version };
+  return {
+    config: parsed.success ? parsed.data : defaultAutomodConfig,
+    ...(row.failureReason ? { failureReason: row.failureReason } : {}),
+    status: row.status,
+    version: row.version,
+  };
 }

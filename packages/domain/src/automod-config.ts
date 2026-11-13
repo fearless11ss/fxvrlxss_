@@ -17,6 +17,8 @@ export const automodConfigSchema = z.object({
     allowGif: z.boolean(),
     allowImages: z.boolean(),
     allowVideo: z.boolean(),
+    maximumPerWindow: z.number().int().min(1).max(50).default(4),
+    windowSeconds: z.number().int().min(5).max(300).default(30),
   }),
   caps: ruleSchema.extend({
     minimumLetters: z.number().int().min(5).max(100),
@@ -38,6 +40,7 @@ export const automodConfigSchema = z.object({
     maximumRepeats: z.number().int().min(2).max(10),
     windowSeconds: z.number().int().min(5).max(300),
   }),
+  timeoutMinutes: z.number().int().min(1).max(40_320).default(10),
 });
 
 export type AutomodConfig = z.infer<typeof automodConfigSchema>;
@@ -49,6 +52,8 @@ export const defaultAutomodConfig: AutomodConfig = {
     allowImages: true,
     allowVideo: true,
     enabled: true,
+    maximumPerWindow: 4,
+    windowSeconds: 30,
   },
   caps: {
     action: "observe",
@@ -74,4 +79,5 @@ export const defaultAutomodConfig: AutomodConfig = {
     maximumRepeats: 3,
     windowSeconds: 45,
   },
+  timeoutMinutes: 10,
 };

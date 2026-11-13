@@ -5,6 +5,7 @@ import { Client, Events, GatewayIntentBits, Partials } from "discord.js";
 import pino, { type Logger } from "pino";
 
 import type { ResolvedBotConfig } from "./config.js";
+import { DatabaseAutomodPublicationRepository } from "./database-automod-publication.js";
 import { DatabaseAuditWriter } from "./database-audit.js";
 import { startGuildCore, type GuildCore } from "./guild-core.js";
 
@@ -83,6 +84,15 @@ export function createBotRuntime(config: ResolvedBotConfig): BotRuntime {
           void (async () => {
             try {
               core = await startGuildCore({
+                ...(databaseState
+                  ? {
+                      automodPublicationRepository:
+                        new DatabaseAutomodPublicationRepository(
+                          databaseState.database,
+                          config.DISCORD_GUILD_ID,
+                        ),
+                    }
+                  : {}),
                 client,
                 databaseConnected: Boolean(databaseState),
                 guildId: config.DISCORD_GUILD_ID,

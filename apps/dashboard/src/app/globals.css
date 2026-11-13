@@ -967,6 +967,40 @@ textarea:focus-visible {
   padding-inline: 24px;
 }
 
+.publishForm {
+  display: flex;
+  min-height: 72px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+  padding: 14px 18px;
+  border: 1px solid var(--steel);
+  background: var(--coal);
+}
+
+.publishForm button {
+  min-height: 42px;
+  min-width: 180px;
+  border: 1px solid var(--bone);
+  background: var(--bone);
+  color: var(--void);
+  font-weight: 650;
+}
+
+.publishForm button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.publicationError {
+  margin: 0 0 20px;
+  padding: 14px 18px;
+  border: 1px solid #6f4146;
+  color: #d78f94;
+  font-size: 12px;
+}
+
 @media (max-width: 800px) {
   .loginPage,
   .moduleShell {
@@ -1001,7 +1035,8 @@ textarea:focus-visible {
   }
 
   .moduleHeader,
-  .formFooter {
+  .formFooter,
+  .publishForm {
     align-items: stretch;
     flex-direction: column;
   }

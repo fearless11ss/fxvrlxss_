@@ -15,6 +15,13 @@
       "when": 1794549600000,
       "tag": "0001_auth_protection",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794567600000,
+      "tag": "0002_configuration_publication",
+      "breakpoints": true
     }
   ]
 }

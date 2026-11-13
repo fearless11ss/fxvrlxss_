@@ -3,13 +3,23 @@ import Link from "next/link";
 import { requireOwnerSession } from "../../lib/auth";
 import { logoutAction } from "../logout-action";
 import { AutomodForm } from "./automod-form";
-import { getAutomodDraft } from "./data";
+import { getAutomodSnapshot } from "./data";
+import { PublishAutomodForm } from "./publish-form";
 
 export const dynamic = "force-dynamic";
 
+const statusLabels = {
+  draft: "Черновик",
+  failed: "Ошибка",
+  new: "Новая",
+  published: "Применена",
+  queued: "В очереди",
+  superseded: "Заменена",
+} as const;
+
 export default async function AutomodPage() {
   const session = await requireOwnerSession();
-  const draft = await getAutomodDraft();
+  const snapshot = await getAutomodSnapshot();
   return (
     <div className="moduleShell">
       <aside className="moduleSidebar">
@@ -35,22 +45,29 @@ export default async function AutomodPage() {
             <p className="sectionPath">Модуль 01</p>
             <h1>Автомодерация</h1>
             <p>
-              Черновик правил бота. Изменения не применяются к серверу до
-              отдельной публикации.
+              Версионируемые правила. Discord-токен остаётся у бота; панель
+              передаёт ему только проверенную конфигурацию.
             </p>
           </div>
           <dl>
             <div>
               <dt>Версия</dt>
-              <dd>{draft.version || "Новая"}</dd>
+              <dd>{snapshot.version || "Новая"}</dd>
             </div>
             <div>
               <dt>Состояние</dt>
-              <dd>Черновик</dd>
+              <dd>{statusLabels[snapshot.status]}</dd>
             </div>
           </dl>
         </header>
-        <AutomodForm config={draft.config} />
+        {snapshot.failureReason ? (
+          <p className="publicationError">{snapshot.failureReason}</p>
+        ) : null}
+        <PublishAutomodForm
+          disabled={snapshot.status !== "draft"}
+          version={snapshot.version}
+        />
+        <AutomodForm config={snapshot.config} />
       </main>
     </div>
   );
