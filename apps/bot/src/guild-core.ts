@@ -14,6 +14,7 @@ import {
 import type { Logger } from "pino";
 
 import { AuditBus, type AuditWriter } from "./audit.js";
+import { AsyncEventGate } from "./async-event-gate.js";
 import {
   buildLifecycleComponents,
   buildStatusComponents,
@@ -93,19 +94,6 @@ function isOwner(member: GuildMember, resources: GuildResources) {
   return member.roles.cache.has(resources.roles.owner);
 }
 
-function safeOn<EventName extends keyof ClientEvents>(
-  client: Client,
-  logger: Logger,
-  eventName: EventName,
-  listener: (...arguments_: ClientEvents[EventName]) => Promise<void>,
-) {
-  client.on(eventName, (...arguments_) => {
-    void listener(...arguments_).catch((error: unknown) => {
-      logger.error({ error, eventName }, "discord event handler failed");
-    });
-  });
-}
-
 async function registerStatusCommand(guild: Guild) {
   const command = new SlashCommandBuilder()
     .setName("статус")
@@ -123,6 +111,23 @@ export async function startGuildCore(
   options: GuildCoreOptions,
 ): Promise<GuildCore> {
   const { client, guildId, logger } = options;
+  const eventGate = new AsyncEventGate((error) => {
+    logger.error({ error }, "discord event gate failed");
+  });
+  const safeOn = <EventName extends keyof ClientEvents>(
+    eventName: EventName,
+    listener: (...arguments_: ClientEvents[EventName]) => Promise<void>,
+  ) => {
+    client.on(eventName, (...arguments_) => {
+      eventGate.run(async () => {
+        try {
+          await listener(...arguments_);
+        } catch (error) {
+          logger.error({ error, eventName }, "discord event handler failed");
+        }
+      });
+    });
+  };
   const guild = await client.guilds.fetch(guildId);
   const resources = await resolveGuildResources(guild);
   const discordWriter = new DiscordAuditWriter(client, resources);
@@ -136,7 +141,7 @@ export async function startGuildCore(
 
   await registerStatusCommand(guild);
 
-  safeOn(client, logger, Events.GuildMemberAdd, async (member) => {
+  safeOn(Events.GuildMemberAdd, async (member) => {
     if (member.guild.id !== guildId || member.user.bot) return;
     try {
       if (!member.roles.cache.has(resources.roles.member)) {
@@ -173,7 +178,7 @@ export async function startGuildCore(
     }
   });
 
-  safeOn(client, logger, Events.GuildMemberRemove, async (member) => {
+  safeOn(Events.GuildMemberRemove, async (member) => {
     if (member.guild.id !== guildId || member.user.bot) return;
     try {
       await sendLifecycleMessage(client, resources, "left", member.id);
@@ -190,7 +195,7 @@ export async function startGuildCore(
     });
   });
 
-  safeOn(client, logger, Events.GuildMemberUpdate, async (before, after) => {
+  safeOn(Events.GuildMemberUpdate, async (before, after) => {
     if (after.guild.id !== guildId) return;
     const addedRoles = after.roles.cache
       .filter((role) => !before.roles.cache.has(role.id))
@@ -240,7 +245,7 @@ export async function startGuildCore(
     });
   });
 
-  safeOn(client, logger, Events.MessageCreate, async (message) => {
+  safeOn(Events.MessageCreate, async (message) => {
     if (message.guildId !== guildId) return;
     await audit.publish({
       actorId: message.author.id,
@@ -273,7 +278,7 @@ export async function startGuildCore(
     });
   });
 
-  safeOn(client, logger, Events.MessageUpdate, async (before, after) => {
+  safeOn(Events.MessageUpdate, async (before, after) => {
     if (after.guildId !== guildId) return;
     if (
       before.content === after.content &&
@@ -300,7 +305,7 @@ export async function startGuildCore(
     });
   });
 
-  safeOn(client, logger, Events.MessageDelete, async (message) => {
+  safeOn(Events.MessageDelete, async (message) => {
     if (message.guildId !== guildId) return;
     await audit.publish({
       ...(message.author?.id ? { actorId: message.author.id } : {}),
@@ -317,24 +322,19 @@ export async function startGuildCore(
     });
   });
 
-  safeOn(
-    client,
-    logger,
-    Events.MessageBulkDelete,
-    async (messages, channel) => {
-      if (channel.guildId !== guildId) return;
-      await audit.publish({
-        category: "messages",
-        discord: true,
-        eventType: "message.bulk_deleted",
-        payload: { messageIds: [...messages.keys()] },
-        summary: `В <#${channel.id}> массово удалено сообщений: ${messages.size}.`,
-        title: "Массовое удаление сообщений",
-      });
-    },
-  );
+  safeOn(Events.MessageBulkDelete, async (messages, channel) => {
+    if (channel.guildId !== guildId) return;
+    await audit.publish({
+      category: "messages",
+      discord: true,
+      eventType: "message.bulk_deleted",
+      payload: { messageIds: [...messages.keys()] },
+      summary: `В <#${channel.id}> массово удалено сообщений: ${messages.size}.`,
+      title: "Массовое удаление сообщений",
+    });
+  });
 
-  safeOn(client, logger, Events.GuildBanAdd, async (ban) => {
+  safeOn(Events.GuildBanAdd, async (ban) => {
     if (ban.guild.id !== guildId) return;
     await audit.publish({
       category: "moderation",
@@ -347,7 +347,7 @@ export async function startGuildCore(
     });
   });
 
-  safeOn(client, logger, Events.GuildBanRemove, async (ban) => {
+  safeOn(Events.GuildBanRemove, async (ban) => {
     if (ban.guild.id !== guildId) return;
     await audit.publish({
       category: "moderation",
@@ -359,29 +359,24 @@ export async function startGuildCore(
     });
   });
 
-  safeOn(
-    client,
-    logger,
-    Events.AutoModerationActionExecution,
-    async (execution) => {
-      if (execution.guild.id !== guildId) return;
-      await audit.publish({
-        category: "moderation",
-        discord: true,
-        eventType: "discord_automod.executed",
-        payload: {
-          actionType: execution.action.type,
-          channelId: execution.channel?.id,
-          ruleId: execution.ruleId,
-        },
-        subjectId: execution.userId,
-        summary: `Discord AutoMod применил действие к <@${execution.userId}>.`,
-        title: "Сработал Discord AutoMod",
-      });
-    },
-  );
+  safeOn(Events.AutoModerationActionExecution, async (execution) => {
+    if (execution.guild.id !== guildId) return;
+    await audit.publish({
+      category: "moderation",
+      discord: true,
+      eventType: "discord_automod.executed",
+      payload: {
+        actionType: execution.action.type,
+        channelId: execution.channel?.id,
+        ruleId: execution.ruleId,
+      },
+      subjectId: execution.userId,
+      summary: `Discord AutoMod применил действие к <@${execution.userId}>.`,
+      title: "Сработал Discord AutoMod",
+    });
+  });
 
-  safeOn(client, logger, Events.VoiceStateUpdate, async (before, after) => {
+  safeOn(Events.VoiceStateUpdate, async (before, after) => {
     if (after.guild.id !== guildId || before.channelId === after.channelId)
       return;
     await audit.publish({
@@ -399,7 +394,7 @@ export async function startGuildCore(
     });
   });
 
-  safeOn(client, logger, Events.ChannelCreate, async (channel) => {
+  safeOn(Events.ChannelCreate, async (channel) => {
     if (!channel.isDMBased() && channel.guild.id === guildId) {
       await audit.publish({
         category: "server",
@@ -417,7 +412,7 @@ export async function startGuildCore(
     }
   });
 
-  safeOn(client, logger, Events.ChannelDelete, async (channel) => {
+  safeOn(Events.ChannelDelete, async (channel) => {
     if (!channel.isDMBased() && channel.guild.id === guildId) {
       await audit.publish({
         category: "server",
@@ -435,7 +430,7 @@ export async function startGuildCore(
     }
   });
 
-  safeOn(client, logger, Events.ChannelUpdate, async (before, after) => {
+  safeOn(Events.ChannelUpdate, async (before, after) => {
     if (before.isDMBased() || after.isDMBased() || after.guild.id !== guildId)
       return;
     await audit.publish({
@@ -462,7 +457,7 @@ export async function startGuildCore(
     });
   });
 
-  safeOn(client, logger, Events.GuildRoleCreate, async (role) => {
+  safeOn(Events.GuildRoleCreate, async (role) => {
     if (role.guild.id !== guildId) return;
     await audit.publish({
       category: "server",
@@ -475,7 +470,7 @@ export async function startGuildCore(
     });
   });
 
-  safeOn(client, logger, Events.GuildRoleDelete, async (role) => {
+  safeOn(Events.GuildRoleDelete, async (role) => {
     if (role.guild.id !== guildId) return;
     await audit.publish({
       category: "server",
@@ -488,7 +483,7 @@ export async function startGuildCore(
     });
   });
 
-  safeOn(client, logger, Events.GuildRoleUpdate, async (before, after) => {
+  safeOn(Events.GuildRoleUpdate, async (before, after) => {
     if (after.guild.id !== guildId) return;
     await audit.publish({
       category: "server",
@@ -516,7 +511,7 @@ export async function startGuildCore(
     });
   });
 
-  safeOn(client, logger, Events.InviteCreate, async (invite) => {
+  safeOn(Events.InviteCreate, async (invite) => {
     if (invite.guild?.id !== guildId) return;
     await audit.publish({
       ...(invite.inviter?.id ? { actorId: invite.inviter.id } : {}),
@@ -535,7 +530,7 @@ export async function startGuildCore(
     });
   });
 
-  safeOn(client, logger, Events.InviteDelete, async (invite) => {
+  safeOn(Events.InviteDelete, async (invite) => {
     if (invite.guild?.id !== guildId) return;
     await audit.publish({
       category: "security",
@@ -547,7 +542,7 @@ export async function startGuildCore(
     });
   });
 
-  safeOn(client, logger, Events.InteractionCreate, async (interaction) => {
+  safeOn(Events.InteractionCreate, async (interaction) => {
     if (interaction.guildId !== guildId) return;
     const isStatusCommand =
       interaction.isChatInputCommand() && interaction.commandName === "статус";
@@ -595,6 +590,7 @@ export async function startGuildCore(
   return {
     audit,
     async stop() {
+      await eventGate.close();
       await audit.publish({
         category: "bot",
         discord: true,
