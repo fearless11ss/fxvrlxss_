@@ -20,6 +20,10 @@ import type { AutomodPublicationRepository } from "./automod-publication.js";
 import { AutomodPublicationWorker } from "./automod-publication.js";
 import { AutomodRuntime } from "./automod-runtime.js";
 import {
+  describeChannelUpdate,
+  type ChannelUpdateSnapshot,
+} from "./channel-update-log.js";
+import {
   buildLifecycleComponents,
   buildStatusComponents,
   buildWelcomeEmbed,
@@ -673,28 +677,42 @@ export async function startGuildCore(
   safeOn(Events.ChannelUpdate, async (before, after) => {
     if (before.isDMBased() || after.isDMBased() || after.guild.id !== guildId)
       return;
+    const snapshot = (channel: typeof after): ChannelUpdateSnapshot => ({
+      id: channel.id,
+      name: channel.name,
+      ...("nsfw" in channel ? { nsfw: channel.nsfw } : {}),
+      parentId: channel.parentId,
+      permissionOverwrites: channel.permissionOverwrites.cache.map(
+        (overwrite) => ({
+          allow: overwrite.allow.bitfield.toString(),
+          deny: overwrite.deny.bitfield.toString(),
+          id: overwrite.id,
+          type: overwrite.type,
+        }),
+      ),
+      position: channel.position,
+      ...("rateLimitPerUser" in channel
+        ? { rateLimitPerUser: channel.rateLimitPerUser }
+        : {}),
+      ...("topic" in channel ? { topic: channel.topic } : {}),
+      type: channel.type,
+    });
+    const beforeSnapshot = snapshot(before);
+    const afterSnapshot = snapshot(after);
+    const description = describeChannelUpdate(beforeSnapshot, afterSnapshot);
     await refreshGuildResourceCatalog();
     await audit.publish({
       category: "server",
       discord: true,
       eventType: "channel.updated",
       payload: {
-        after: {
-          name: after.name,
-          parentId: after.parentId,
-          position: after.position,
-          type: after.type,
-        },
-        before: {
-          name: before.name,
-          parentId: before.parentId,
-          position: before.position,
-          type: before.type,
-        },
+        after: afterSnapshot,
+        before: beforeSnapshot,
+        changes: description.changes,
       },
       subject: { id: after.id, kind: "channel" },
-      summary: `Изменён канал \`${before.name}\` → \`${after.name}\`.`,
-      title: "Канал изменён",
+      summary: description.summary,
+      title: description.title,
     });
   });
 
