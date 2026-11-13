@@ -22,6 +22,7 @@ import { AutomodRuntime } from "./automod-runtime.js";
 import {
   buildLifecycleComponents,
   buildStatusComponents,
+  buildWelcomeEmbed,
   DiscordAuditWriter,
 } from "./discord-messages.js";
 import { DiscordAutomodAdapter } from "./discord-automod.js";
@@ -167,18 +168,10 @@ async function sendLifecycleMessage(
     return;
   }
 
-  // Mentions inside Components V2 are visual only. Send ordinary content so
-  // Discord creates the notification, then convert the same message to V2.
-  const welcome = await channel.send({
+  await channel.send({
     allowedMentions: { users: [userId] },
     content: `<@${userId}>`,
-  });
-  await new Promise((resolve) => setTimeout(resolve, 750));
-  await welcome.edit({
-    allowedMentions: { parse: [] },
-    components: buildLifecycleComponents(kind, userId),
-    content: null,
-    flags: MessageFlags.IsComponentsV2,
+    embeds: [buildWelcomeEmbed()],
   });
 }
 

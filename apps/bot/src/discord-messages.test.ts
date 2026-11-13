@@ -6,6 +6,7 @@ import {
   buildAuditComponents,
   buildLifecycleComponents,
   buildStatusComponents,
+  buildWelcomeEmbed,
 } from "./discord-messages.js";
 
 const auditEvent: AuditEvent = {
@@ -64,6 +65,13 @@ describe("Components V2 messages", () => {
     expect(left?.type).toBe(ComponentType.Container);
     expect(JSON.stringify(joined)).toContain("Новый участник");
     expect(JSON.stringify(left)).toContain("Участник вышел");
+  });
+
+  it("builds a welcome embed for a content-level notification", () => {
+    const embed = buildWelcomeEmbed().toJSON();
+
+    expect(embed.title).toBe("Новый участник");
+    expect(embed.description).toBe("Добро пожаловать на сервер.");
   });
 
   it("builds the owner status container with a refresh button", () => {

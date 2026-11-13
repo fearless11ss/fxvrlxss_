@@ -3,6 +3,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ContainerBuilder,
+  EmbedBuilder,
   MessageFlags,
   TextDisplayBuilder,
   escapeMarkdown,
@@ -85,6 +86,13 @@ export function buildLifecycleComponents(
         ),
       ),
   ];
+}
+
+export function buildWelcomeEmbed(): EmbedBuilder {
+  return new EmbedBuilder()
+    .setColor(0xf2f2ef)
+    .setTitle("Новый участник")
+    .setDescription("Добро пожаловать на сервер.");
 }
 
 export interface StatusSnapshot {
