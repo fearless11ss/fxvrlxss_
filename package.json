@@ -17,7 +17,7 @@
   },
   "scripts": {
     "build": "npm run build:packages && npm run build:apps",
-    "build:packages": "npm run build -w @fxvrlxss/domain && npm run build -w @fxvrlxss/database",
+    "build:packages": "npm run build -w @fxvrlxss/domain && npm run build -w @fxvrlxss/database && npm run build -w @fxvrlxss/security",
     "build:apps": "npm run build -w @fxvrlxss/bot && npm run build -w @fxvrlxss/ops-cli && npm run build -w @fxvrlxss/dashboard",
     "dev:dashboard": "npm run build:packages && npm run dev -w @fxvrlxss/dashboard",
     "dev:bot": "npm run build:packages && npm run dev -w @fxvrlxss/bot",

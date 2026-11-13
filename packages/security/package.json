@@ -1,0 +1,16 @@
+{
+  "name": "@fxvrlxss/security",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./credentials": {
+      "types": "./src/credentials.ts",
+      "import": "./dist/credentials.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

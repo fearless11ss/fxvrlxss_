@@ -1,6 +1,11 @@
+import Link from "next/link";
+
+import { requireOwnerSession } from "../lib/auth";
+import { logoutAction } from "./logout-action";
+
 const navigation = [
-  ["Обзор", "overview"],
-  ["Автомодерация", "automod"],
+  ["Обзор", "/"],
+  ["Автомодерация", "/automod"],
   ["Тикеты", "tickets"],
   ["Голосовые", "voice"],
   ["Правила и навигация", "rules"],
@@ -39,6 +44,8 @@ const events = [
   { time: "13:41", title: "Участник вышел", meta: "Логи безопасности" },
 ] as const;
 
+export const dynamic = "force-dynamic";
+
 function StatusMark({ warning = false }: Readonly<{ warning?: boolean }>) {
   return (
     <span
@@ -48,7 +55,8 @@ function StatusMark({ warning = false }: Readonly<{ warning?: boolean }>) {
   );
 }
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const session = await requireOwnerSession();
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -59,24 +67,24 @@ export default function DashboardPage() {
 
         <nav aria-label="Основная навигация" className="navigation">
           {navigation.map(([label, key], index) => (
-            <a
+            <Link
               aria-current={index === 0 ? "page" : undefined}
               className={index === 0 ? "navItem active" : "navItem"}
-              href={`#${key}`}
+              href={key.startsWith("/") ? key : `#${key}`}
               key={key}
             >
               <span className="navIndex">
                 {String(index + 1).padStart(2, "0")}
               </span>
               <span>{label}</span>
-            </a>
+            </Link>
           ))}
         </nav>
 
         <div className="ownerBlock">
           <span className="ownerAvatar">A</span>
           <span>
-            <strong>Владелец</strong>
+            <strong>{session.username}</strong>
             <small>Защищённая сессия</small>
           </span>
         </div>
@@ -90,9 +98,11 @@ export default function DashboardPage() {
           </div>
           <div className="topbarMeta">
             <span>Последняя проверка 14:34</span>
-            <button className="quietButton" type="button">
-              Заблокировать
-            </button>
+            <form action={logoutAction}>
+              <button className="quietButton" type="submit">
+                Заблокировать
+              </button>
+            </form>
           </div>
         </header>
 

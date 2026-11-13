@@ -191,3 +191,28 @@ export const recoveryCodes = pgTable(
   },
   (table) => [uniqueIndex("recovery_code_hash_unique").on(table.codeHash)],
 );
+
+export const blockedIpAddresses = pgTable("blocked_ip_addresses", {
+  ipHash: text("ip_hash").primaryKey(),
+  reason: text("reason").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export const loginAttempts = pgTable(
+  "login_attempts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ipHash: text("ip_hash").notNull(),
+    username: text("username").notNull(),
+    successful: boolean("successful").default(false).notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("login_attempts_ip_time_idx").on(table.ipHash, table.occurredAt),
+  ],
+);

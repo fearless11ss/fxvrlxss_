@@ -11,6 +11,7 @@ COPY apps/dashboard/package.json apps/dashboard/package.json
 COPY apps/ops-cli/package.json apps/ops-cli/package.json
 COPY packages/database/package.json packages/database/package.json
 COPY packages/domain/package.json packages/domain/package.json
+COPY packages/security/package.json packages/security/package.json
 
 RUN npm ci
 
@@ -33,6 +34,8 @@ COPY --from=builder --chown=node:node /workspace/packages/domain/package.json ./
 COPY --from=builder --chown=node:node /workspace/packages/database/dist ./packages/database/dist
 COPY --from=builder --chown=node:node /workspace/packages/database/migrations ./packages/database/migrations
 COPY --from=builder --chown=node:node /workspace/packages/database/package.json ./packages/database/package.json
+COPY --from=builder --chown=node:node /workspace/packages/security/dist ./packages/security/dist
+COPY --from=builder --chown=node:node /workspace/packages/security/package.json ./packages/security/package.json
 
 USER node
 CMD ["node", "apps/bot/dist/index.js"]

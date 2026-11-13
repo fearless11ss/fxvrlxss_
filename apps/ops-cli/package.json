@@ -7,11 +7,18 @@
     "build": "tsc -p tsconfig.build.json",
     "predev": "npm run build -w @fxvrlxss/domain",
     "dev": "tsx src/index.ts",
+    "preowner:bootstrap": "npm run build -w @fxvrlxss/database && npm run build -w @fxvrlxss/security",
+    "owner:bootstrap": "tsx src/bootstrap-owner.ts",
+    "preowner:unblock-ip": "npm run build -w @fxvrlxss/database && npm run build -w @fxvrlxss/security",
+    "owner:unblock-ip": "tsx src/unblock-owner-ip.ts",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@fxvrlxss/database": "*",
+    "@fxvrlxss/security": "*",
     "discord.js": "14.28.1",
+    "drizzle-orm": "0.45.4",
     "zod": "4.6.7"
   },
   "devDependencies": {

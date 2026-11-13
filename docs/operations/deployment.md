@@ -34,6 +34,31 @@ Docker Compose expects the files documented in
 `*_FILE` variables so secret contents never need to appear in Compose
 environment blocks.
 
+## Owner bootstrap
+
+After migrations complete, create the only dashboard account once:
+
+```bash
+npm run owner:bootstrap -w @fxvrlxss/ops-cli -- --username=owner
+```
+
+If brute-force protection permanently blocks the owner's address, remove the
+block only from an SSH session on the server:
+
+```bash
+npm run owner:unblock-ip -w @fxvrlxss/ops-cli -- --ip=203.0.113.10
+```
+
+The command refuses to run when an owner already exists. It prints a generated
+password and an `otpauth://` URI once; store them immediately in the password
+manager and authenticator. Passwords use scrypt, TOTP seeds are encrypted with
+AES-256-GCM, and browser session tokens are stored only as SHA-256 hashes.
+
+Ten failed login attempts from one address within fifteen minutes permanently
+block that address in production. Only keyed hashes of addresses are stored.
+`AUTH_COOKIE_SECURE=false` is intentional while the panel is reached through an
+HTTP Tailscale IP; switch it to `true` when HTTPS is enabled.
+
 ## Backups
 
 Encrypted PostgreSQL backups are stored outside the VPS: seven daily, four

@@ -17,6 +17,7 @@ apps/
 packages/
   domain/       Pure policies, guild blueprint, moderation decisions
   database/     PostgreSQL schema and persistence adapters
+  security/     Password hashing, TOTP, encryption, session and IP hashing
 docs/           Obsidian vault and GitHub documentation
 infra/          Docker and deployment configuration
 scripts/        Repository validation utilities

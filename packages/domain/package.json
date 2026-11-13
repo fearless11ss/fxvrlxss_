@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./automod-config": {
+      "types": "./src/automod-config.ts",
+      "import": "./dist/automod-config.js"
+    },
     "./guild-blueprint": {
       "types": "./src/guild-blueprint.ts",
       "import": "./dist/guild-blueprint.js"

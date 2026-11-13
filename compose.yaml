@@ -91,8 +91,18 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+    environment:
+      AUTH_COOKIE_SECURE: "false"
+      AUTH_ENCRYPTION_KEY_FILE: /run/secrets/auth_encryption_key
+      DATABASE_URL_FILE: /run/secrets/database_url
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:?set DISCORD_GUILD_ID}
+      NODE_ENV: production
+      SESSION_TTL_HOURS: 12
     ports:
       - "127.0.0.1:3000:3000"
+    secrets:
+      - auth_encryption_key
+      - database_url
     healthcheck:
       test:
         [
@@ -115,6 +125,8 @@ services:
       - no-new-privileges:true
 
 secrets:
+  auth_encryption_key:
+    file: ./secrets/auth_encryption_key
   database_url:
     file: ./secrets/database_url
   discord_token:

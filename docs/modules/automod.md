@@ -39,4 +39,7 @@ and appeal links.
 - All matched rules are included in the audit event.
 - Permanent bans never result from text detection alone.
 - New rules support observation mode before enforcement.
-- Ordinary untouched messages are not archived.
+- Ordinary untouched messages are archived only in PostgreSQL. Discord receives
+  message edits, deletions, moderation signals, and other actionable events.
+- Dashboard edits create immutable versioned drafts; publishing remains disabled
+  until the Discord AutoMod adapter is implemented.

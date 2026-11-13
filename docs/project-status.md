@@ -29,8 +29,9 @@ updated: 2026-11-13
 
 ## Product modules
 
-- [ ] Single-owner password and TOTP authentication
-- [ ] Configuration drafts and atomic publication
+- [x] Single-owner password, TOTP, sessions, and brute-force protection
+- [x] Versioned automoderation drafts
+- [ ] Atomic configuration publication
 - [ ] Discord-native AutoMod publication adapter
 - [ ] Moderation sanctions, points, evidence, and appeals
 - [x] Split Discord log routing and full database event journal foundation

@@ -54,6 +54,23 @@ button {
   cursor: pointer;
 }
 
+input,
+select,
+textarea {
+  border: 1px solid var(--steel-light);
+  border-radius: 0;
+  background: #090909;
+  color: var(--bone);
+  font: inherit;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 1px solid var(--bone);
+  outline-offset: 2px;
+}
+
 .shell {
   display: grid;
   grid-template-columns: 252px minmax(0, 1fr) 286px;
@@ -623,5 +640,388 @@ button {
   *::after {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+.loginPage {
+  display: grid;
+  min-height: 100vh;
+  grid-template-columns: minmax(0, 1.25fr) minmax(390px, 0.75fr);
+}
+
+.loginBrand,
+.loginPanel {
+  display: flex;
+  position: relative;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(40px, 7vw, 110px);
+}
+
+.loginBrand {
+  min-height: 100vh;
+  overflow: hidden;
+  border-right: 1px solid var(--steel);
+}
+
+.loginBrand p,
+.loginBrand span {
+  color: var(--ash);
+  font-size: 12px;
+}
+
+.loginBrand h1 {
+  position: relative;
+  z-index: 1;
+  margin: 18px 0 25px;
+  font-family: var(--blackletter);
+  font-size: clamp(68px, 11vw, 160px);
+  font-weight: 700;
+  line-height: 0.8;
+  letter-spacing: -0.045em;
+}
+
+.loginSigil {
+  position: absolute;
+  right: 9%;
+  width: min(44vw, 570px);
+  aspect-ratio: 1;
+  border: 1px solid #20201f;
+  transform: rotate(45deg);
+}
+
+.loginSigil::before,
+.loginSigil::after {
+  position: absolute;
+  inset: 16%;
+  border: 1px solid #2e2e2c;
+  content: "";
+}
+
+.loginSigil::after {
+  inset: 36%;
+  border-color: var(--ash);
+}
+
+.loginPanel {
+  gap: 52px;
+  background: var(--coal);
+}
+
+.loginPanel h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 48px;
+  font-weight: 500;
+  line-height: 0.95;
+}
+
+.loginPanel > div > p:last-child {
+  max-width: 390px;
+  color: var(--ash);
+  line-height: 1.7;
+}
+
+.loginForm {
+  display: grid;
+  gap: 22px;
+}
+
+.loginForm label,
+.automodForm label {
+  display: grid;
+  gap: 8px;
+  color: var(--ash);
+  font-size: 11px;
+}
+
+.loginForm input,
+.automodForm input,
+.automodForm select,
+.automodForm textarea {
+  min-height: 44px;
+  padding: 10px 12px;
+}
+
+.loginForm button,
+.formFooter button {
+  min-height: 46px;
+  border: 1px solid var(--bone);
+  background: var(--bone);
+  color: var(--void);
+  font-weight: 650;
+}
+
+.loginForm button:disabled,
+.formFooter button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.formError {
+  margin: 0;
+  color: #d78f94;
+  font-size: 11px;
+}
+
+.formSuccess {
+  color: var(--bone);
+  font-size: 11px;
+}
+
+.moduleShell {
+  display: grid;
+  min-height: 100vh;
+  grid-template-columns: 238px minmax(0, 1fr);
+}
+
+.moduleSidebar {
+  display: flex;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  flex-direction: column;
+  border-right: 1px solid var(--steel);
+  background: var(--void);
+}
+
+.moduleBrand {
+  padding: 32px 24px;
+  border-bottom: 1px solid var(--steel);
+  color: var(--bone);
+  font-family: var(--blackletter);
+  font-size: 29px;
+  text-decoration: none;
+}
+
+.moduleSidebar nav {
+  display: grid;
+  padding: 22px 12px;
+}
+
+.moduleSidebar nav a {
+  padding: 14px 12px;
+  border-left: 1px solid transparent;
+  color: var(--ash);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.moduleSidebar nav a[aria-current="page"] {
+  border-left-color: var(--bone);
+  background: #10100f;
+  color: var(--bone);
+}
+
+.moduleOwner {
+  display: grid;
+  gap: 8px;
+  margin-top: auto;
+  padding: 22px 24px;
+  border-top: 1px solid var(--steel);
+  font-size: 11px;
+}
+
+.moduleOwner button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+}
+
+.moduleWorkspace {
+  width: min(100%, 1320px);
+  padding: 58px clamp(28px, 5vw, 76px) 80px;
+}
+
+.moduleHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 48px;
+  padding-bottom: 44px;
+  border-bottom: 1px solid var(--steel);
+}
+
+.moduleHeader h1 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: clamp(50px, 7vw, 86px);
+  font-weight: 500;
+  line-height: 0.9;
+  letter-spacing: -0.045em;
+}
+
+.moduleHeader > div > p:last-child {
+  max-width: 650px;
+  margin: 22px 0 0;
+  color: var(--ash);
+  line-height: 1.7;
+}
+
+.moduleHeader dl {
+  min-width: 190px;
+  margin: 0;
+}
+
+.moduleHeader dl div {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--steel);
+  font-size: 10px;
+}
+
+.moduleHeader dt {
+  color: var(--muted);
+}
+
+.moduleHeader dd {
+  margin: 0;
+}
+
+.automodForm {
+  padding-top: 38px;
+}
+
+.automodMaster {
+  display: grid;
+  grid-template-columns: 1fr minmax(240px, 0.45fr);
+  align-items: end;
+  gap: 40px;
+  padding: 0 0 32px;
+  border-bottom: 1px solid var(--steel-light);
+}
+
+.switchLine {
+  display: flex !important;
+  align-items: center;
+  gap: 11px !important;
+}
+
+.switchLine input,
+.compactChecks input {
+  width: 17px;
+  min-height: 17px;
+  margin: 0;
+  accent-color: var(--bone);
+}
+
+.ruleGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-left: 1px solid var(--steel);
+}
+
+.ruleGrid fieldset {
+  display: grid;
+  min-width: 0;
+  gap: 17px;
+  margin: 0;
+  padding: 28px;
+  border: 0;
+  border-right: 1px solid var(--steel);
+  border-bottom: 1px solid var(--steel);
+}
+
+.ruleGrid legend {
+  padding: 0;
+  font-family: var(--display);
+  font-size: 27px;
+}
+
+.compactChecks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.compactChecks label {
+  display: flex;
+  align-items: center;
+}
+
+.exemptionGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  padding: 34px 0;
+}
+
+.automodForm textarea {
+  min-height: 92px;
+  resize: vertical;
+}
+
+.formFooter {
+  display: flex;
+  min-height: 80px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-top: 1px solid var(--steel);
+}
+
+.formFooter button {
+  min-width: 210px;
+  padding-inline: 24px;
+}
+
+@media (max-width: 800px) {
+  .loginPage,
+  .moduleShell {
+    display: block;
+  }
+
+  .loginBrand {
+    min-height: 42vh;
+    border-right: 0;
+    border-bottom: 1px solid var(--steel);
+  }
+
+  .loginPanel {
+    min-height: 58vh;
+  }
+
+  .moduleSidebar {
+    position: static;
+    height: auto;
+  }
+
+  .moduleSidebar nav {
+    display: flex;
+  }
+
+  .moduleOwner {
+    display: none;
+  }
+
+  .moduleWorkspace {
+    padding: 42px 20px 60px;
+  }
+
+  .moduleHeader,
+  .formFooter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .moduleHeader dl {
+    width: 100%;
+  }
+
+  .automodMaster,
+  .ruleGrid,
+  .exemptionGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .ruleGrid {
+    border-left: 0;
+  }
+
+  .ruleGrid fieldset {
+    padding-inline: 0;
+    border-right: 0;
   }
 }
