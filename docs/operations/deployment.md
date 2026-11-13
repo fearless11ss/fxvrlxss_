@@ -20,9 +20,20 @@ status: accepted
 ## Network posture
 
 - Deny incoming traffic by default.
-- Dashboard binds to localhost and is exposed by Tailscale Serve.
+- Dashboard binds to localhost and is exposed only inside the tailnet by a
+  persistent TCP forward:
+
+  ```bash
+  tailscale serve --bg --yes --tcp=3000 tcp://127.0.0.1:3000
+  ```
+
 - SSH becomes Tailscale-only after bootstrap.
 - Tailscale device identity replaces public-IP allowlists.
+
+Before removing the public SSH rule, open a new SSH session through the
+Tailscale address and verify it can use `sudo`. Reboot once with a temporary
+recovery timer, verify that Tailscale, Serve, Docker, and the application return
+automatically, then remove the timer and the public SSH rule.
 
 ## Secrets
 
@@ -33,6 +44,11 @@ Docker Compose expects the files documented in
 [the secret-file guide](../../secrets/README.md). The application supports
 `*_FILE` variables so secret contents never need to appear in Compose
 environment blocks.
+
+Before starting Compose, assign the secret files to `root:<deployment-group>`
+with mode `0640`. The deployment group's numeric GID must be `1000`, matching
+the unprivileged `node` group inside the application images. Mode `0600` causes
+the migration, bot, and dashboard containers to fail with `EACCES`.
 
 ## Owner bootstrap
 

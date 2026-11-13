@@ -25,7 +25,7 @@ updated: 2026-11-13
 - [x] Docker Compose production topology
 - [x] CI checks for docs, formatting, lint, types, tests, and build
 - [x] Private GitHub remote
-- [ ] Ubuntu container smoke-test
+- [x] Ubuntu container smoke-test
 
 ## Product modules
 
@@ -44,7 +44,7 @@ updated: 2026-11-13
 
 - [ ] Original brand asset set
 - [x] Test guild blueprint applied and verified idempotent
-- [ ] Tailscale and VPS hardening
+- [x] Tailscale and VPS hardening
 - [ ] Production guild cutover
 - [ ] Seven-day observation period
 
