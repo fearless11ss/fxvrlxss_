@@ -1,0 +1,49 @@
+{
+  "name": "fxvrlxss",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.17.0 <27"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "overrides": {
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "11.0.1"
+    }
+  },
+  "scripts": {
+    "build": "npm run build:packages && npm run build:apps",
+    "build:packages": "npm run build -w @fxvrlxss/domain && npm run build -w @fxvrlxss/database",
+    "build:apps": "npm run build -w @fxvrlxss/bot && npm run build -w @fxvrlxss/ops-cli && npm run build -w @fxvrlxss/dashboard",
+    "dev:dashboard": "npm run build:packages && npm run dev -w @fxvrlxss/dashboard",
+    "dev:bot": "npm run build:packages && npm run dev -w @fxvrlxss/bot",
+    "docs:check": "node scripts/check-doc-links.mjs",
+    "format": "prettier --check .",
+    "format:write": "prettier --write .",
+    "lint": "eslint \"apps/*/src/**/*.{ts,tsx}\" \"packages/*/src/**/*.ts\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "check": "npm run docs:check && npm run format && npm run lint && npm run typecheck && npm run test"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@types/node": "24.19.2",
+    "@vitest/coverage-v8": "5.1.0",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.4.6",
+    "eslint-config-prettier": "10.1.8",
+    "globals": "17.14.0",
+    "prettier": "3.10.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.2",
+    "vitest": "5.1.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}

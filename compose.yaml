@@ -1,0 +1,124 @@
+name: fxvrlxss
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fxvrlxss
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_USER: fxvrlxss
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fxvrlxss -d fxvrlxss"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 1g
+    cpus: 0.75
+    security_opt:
+      - no-new-privileges:true
+
+  migrate:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      target: bot
+    command: ["node", "packages/database/dist/migrate.js"]
+    environment:
+      DATABASE_URL_FILE: /run/secrets/database_url
+    secrets:
+      - database_url
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+  bot:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      target: bot
+    restart: unless-stopped
+    environment:
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:?set DISCORD_GUILD_ID}
+      DISCORD_TOKEN_FILE: /run/secrets/discord_token
+      HEALTH_PORT: 3011
+      LOG_LEVEL: info
+      NODE_ENV: production
+    secrets:
+      - discord_token
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3011/health').then(r=>{if(!r.ok)process.exit(1)})",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 1g
+    cpus: 1.0
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      target: dashboard
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)})",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 768m
+    cpus: 0.75
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+secrets:
+  database_url:
+    file: ./secrets/database_url
+  discord_token:
+    file: ./secrets/discord_token
+  postgres_password:
+    file: ./secrets/postgres_password
+
+volumes:
+  postgres_data:

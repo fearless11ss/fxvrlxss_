@@ -1,0 +1,23 @@
+{
+  "name": "@fxvrlxss/domain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./guild-blueprint": {
+      "types": "./src/guild-blueprint.ts",
+      "import": "./dist/guild-blueprint.js"
+    },
+    "./moderation": {
+      "types": "./src/moderation.ts",
+      "import": "./dist/moderation.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "zod": "4.6.7"
+  }
+}

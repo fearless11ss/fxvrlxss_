@@ -1,0 +1,12 @@
+.git
+.github
+.next
+node_modules
+dist
+coverage
+data
+backups
+tmp
+.env*
+secrets
+*.log
