@@ -1015,9 +1015,137 @@ textarea:focus-visible {
   padding: 34px 0;
 }
 
-.automodForm textarea {
-  min-height: 92px;
-  resize: vertical;
+.resourcePicker {
+  position: relative;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.resourcePicker legend {
+  margin-bottom: 8px;
+  color: var(--ash);
+  font-size: 11px;
+}
+
+.resourcePickerTrigger {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 11px 14px;
+  border: 1px solid var(--steel-light);
+  background: #090909;
+  color: var(--bone);
+  text-align: left;
+}
+
+.resourcePickerTrigger:hover,
+.resourcePickerTrigger[aria-expanded="true"] {
+  border-color: var(--ash);
+}
+
+.resourcePickerMark {
+  flex: 0 0 auto;
+  color: var(--ash);
+  font-family: var(--display);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.resourcePickerPanel {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 7px);
+  left: 0;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--steel-light);
+  background: #090909;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.52);
+}
+
+.resourcePickerPanel > input {
+  width: 100%;
+}
+
+.resourcePickerOptions {
+  max-height: 265px;
+  margin-top: 10px;
+  border-top: 1px solid var(--steel);
+  border-bottom: 1px solid var(--steel);
+  overflow-y: auto;
+}
+
+.resourcePickerOption {
+  display: grid !important;
+  grid-template-columns: 17px 20px minmax(0, 1fr);
+  min-height: 48px;
+  align-items: center;
+  gap: 9px !important;
+  padding: 8px 9px;
+  border-bottom: 1px solid #1d1d1c;
+  color: var(--bone) !important;
+  cursor: pointer;
+}
+
+.resourcePickerOption:last-child {
+  border-bottom: 0;
+}
+
+.resourcePickerOption:hover,
+.resourcePickerOption[aria-selected="true"] {
+  background: #111110;
+}
+
+.resourcePickerOption input {
+  width: 17px;
+  min-height: 17px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--bone);
+}
+
+.resourcePickerOption strong,
+.resourcePickerOption small {
+  display: block;
+}
+
+.resourcePickerOption strong {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.resourcePickerOption small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.resourcePrefix {
+  color: var(--muted);
+  font-family: var(--display);
+  font-size: 17px;
+  text-align: center;
+}
+
+.resourcePickerCount,
+.resourcePickerEmpty {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.resourcePickerCount {
+  padding-top: 10px;
+}
+
+.resourcePickerEmpty {
+  margin: 0;
+  padding: 18px 9px;
+  line-height: 1.6;
 }
 
 .formFooter {

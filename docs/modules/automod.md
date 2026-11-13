@@ -52,6 +52,10 @@ and appeal links.
   have been applied. Failures are stored as `failed` with a visible reason.
 - The bot polls at most one queued version at a time. The previously published
   version becomes `superseded` only after the replacement is applied.
+- Exempt roles and channels are selected by name in the dashboard. The bot
+  synchronizes the guild resource catalog through PostgreSQL, so the dashboard
+  never needs the Discord token. Configuration versions continue to store the
+  selected Discord IDs.
 
 ## Current publication mapping
 

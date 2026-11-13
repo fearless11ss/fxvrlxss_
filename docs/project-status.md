@@ -34,6 +34,7 @@ updated: 2026-11-13
 - [x] Acknowledged configuration publication through PostgreSQL
 - [x] Discord-native invitation AutoMod publication adapter
 - [x] Custom message-rule runtime with delete, timeout, quarantine, kick, and ban actions
+- [x] Searchable role and channel selectors backed by a bot-synchronized catalog
 - [ ] Moderation sanctions, points, evidence, and appeals
 - [x] Split Discord log routing and full database event journal foundation
 - [ ] Ticket workflow and transcripts

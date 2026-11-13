@@ -31,6 +31,7 @@ flowchart LR
 | Configuration publication | Publish one validated version | Validation, audit, atomic activation            |
 | Audit journal             | Append and query events       | PostgreSQL schema, retention, filtering         |
 | Audit dispatch            | Publish one ordered event     | Discord routing, persistence, failure isolation |
+| Guild resource catalog    | Replace one guild snapshot    | Discord names, categories, ordering, stale rows |
 | Discord adapter           | Apply desired state           | Rate limits, hierarchy, retries, audit reasons  |
 
 The pure domain package contains policy and desired state. Discord and
@@ -40,6 +41,8 @@ PostgreSQL are adapters at explicit seams, not dependencies of the policy.
 
 - `bot` remains available when the dashboard restarts.
 - `dashboard` never receives the Discord token or Docker socket.
+- The bot publishes role and channel metadata to PostgreSQL for dashboard
+  selectors; the dashboard does not call Discord directly.
 - PostgreSQL is the source of truth.
 - Redis is intentionally absent until measured contention requires it.
 - The bot caches the last published moderation configuration.

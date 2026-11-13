@@ -29,6 +29,10 @@ import {
   resolveGuildResources,
   type GuildResources,
 } from "./guild-resources.js";
+import {
+  collectGuildResourceCatalog,
+  type GuildResourceCatalogWriter,
+} from "./guild-resource-catalog.js";
 
 export interface GuildCore {
   readonly audit: AuditBus;
@@ -40,6 +44,7 @@ export interface GuildCoreOptions {
   readonly client: Client;
   readonly databaseConnected: boolean;
   readonly guildId: string;
+  readonly guildResourceCatalogWriter?: GuildResourceCatalogWriter;
   readonly logger: Logger;
   readonly persistentWriters?: readonly AuditWriter[];
 }
@@ -200,6 +205,13 @@ export async function startGuildCore(
   };
   const guild = await client.guilds.fetch(guildId);
   const resources = await resolveGuildResources(guild);
+  const refreshGuildResourceCatalog = async () => {
+    await options.guildResourceCatalogWriter?.replace(
+      guildId,
+      collectGuildResourceCatalog(guild),
+    );
+  };
+  await refreshGuildResourceCatalog();
   const automodRuntime = new AutomodRuntime();
   const discordAutomod = new DiscordAutomodAdapter(
     guild,
@@ -586,6 +598,7 @@ export async function startGuildCore(
 
   safeOn(Events.ChannelCreate, async (channel) => {
     if (!channel.isDMBased() && channel.guild.id === guildId) {
+      await refreshGuildResourceCatalog();
       await audit.publish({
         category: "server",
         discord: true,
@@ -604,6 +617,7 @@ export async function startGuildCore(
 
   safeOn(Events.ChannelDelete, async (channel) => {
     if (!channel.isDMBased() && channel.guild.id === guildId) {
+      await refreshGuildResourceCatalog();
       await audit.publish({
         category: "server",
         discord: true,
@@ -623,6 +637,7 @@ export async function startGuildCore(
   safeOn(Events.ChannelUpdate, async (before, after) => {
     if (before.isDMBased() || after.isDMBased() || after.guild.id !== guildId)
       return;
+    await refreshGuildResourceCatalog();
     await audit.publish({
       category: "server",
       discord: true,
@@ -649,6 +664,7 @@ export async function startGuildCore(
 
   safeOn(Events.GuildRoleCreate, async (role) => {
     if (role.guild.id !== guildId) return;
+    await refreshGuildResourceCatalog();
     await audit.publish({
       category: "server",
       discord: true,
@@ -662,6 +678,7 @@ export async function startGuildCore(
 
   safeOn(Events.GuildRoleDelete, async (role) => {
     if (role.guild.id !== guildId) return;
+    await refreshGuildResourceCatalog();
     await audit.publish({
       category: "server",
       discord: true,
@@ -675,6 +692,7 @@ export async function startGuildCore(
 
   safeOn(Events.GuildRoleUpdate, async (before, after) => {
     if (after.guild.id !== guildId) return;
+    await refreshGuildResourceCatalog();
     await audit.publish({
       category: "server",
       discord: true,

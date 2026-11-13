@@ -39,10 +39,9 @@ function optionalNumberValue(
 }
 
 function idList(formData: FormData, name: string): string[] {
-  const value = formData.get(name);
-  if (typeof value !== "string") return [];
-  return value
-    .split(/[\s,]+/)
+  return formData
+    .getAll(name)
+    .filter((value): value is string => typeof value === "string")
     .map((value) => value.trim())
     .filter(Boolean);
 }

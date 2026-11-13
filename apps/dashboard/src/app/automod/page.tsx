@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requireOwnerSession } from "../../lib/auth";
 import { logoutAction } from "../logout-action";
 import { AutomodForm } from "./automod-form";
-import { getAutomodSnapshot } from "./data";
+import { getAutomodResourceOptions, getAutomodSnapshot } from "./data";
 import { PublishAutomodForm } from "./publish-form";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +39,10 @@ const statusDescriptions = {
 
 export default async function AutomodPage() {
   const session = await requireOwnerSession();
-  const snapshot = await getAutomodSnapshot();
+  const [snapshot, resources] = await Promise.all([
+    getAutomodSnapshot(),
+    getAutomodResourceOptions(),
+  ]);
   return (
     <div className="shell automodShell">
       <aside className="sidebar">
@@ -113,7 +116,7 @@ export default async function AutomodPage() {
           />
         </section>
 
-        <AutomodForm config={snapshot.config} />
+        <AutomodForm config={snapshot.config} resources={resources} />
       </main>
 
       <aside className="changeRail" aria-label="Состояние публикации">

@@ -7,6 +7,7 @@ import pino, { type Logger } from "pino";
 import type { ResolvedBotConfig } from "./config.js";
 import { DatabaseAutomodPublicationRepository } from "./database-automod-publication.js";
 import { DatabaseAuditWriter } from "./database-audit.js";
+import { DatabaseGuildResourceCatalogWriter } from "./database-guild-resource-catalog.js";
 import { startGuildCore, type GuildCore } from "./guild-core.js";
 
 export interface BotRuntime {
@@ -90,6 +91,10 @@ export function createBotRuntime(config: ResolvedBotConfig): BotRuntime {
                         new DatabaseAutomodPublicationRepository(
                           databaseState.database,
                           config.DISCORD_GUILD_ID,
+                        ),
+                      guildResourceCatalogWriter:
+                        new DatabaseGuildResourceCatalogWriter(
+                          databaseState.database,
                         ),
                     }
                   : {}),

@@ -3,6 +3,7 @@ import {
   index,
   integer,
   jsonb,
+  primaryKey,
   pgEnum,
   pgTable,
   text,
@@ -81,6 +82,25 @@ export const auditEvents = pgTable(
     index("audit_events_occurred_idx").on(table.occurredAt),
     index("audit_events_subject_idx").on(table.subjectId),
     index("audit_events_type_idx").on(table.category, table.eventType),
+  ],
+);
+
+export const discordResourceCatalog = pgTable(
+  "discord_resource_catalog",
+  {
+    guildId: text("guild_id").notNull(),
+    kind: text("kind").notNull(),
+    resourceId: text("resource_id").notNull(),
+    name: text("name").notNull(),
+    parentName: text("parent_name"),
+    position: integer("position").default(0).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.guildId, table.kind, table.resourceId] }),
+    index("discord_resource_catalog_kind_idx").on(table.guildId, table.kind),
   ],
 );
 
