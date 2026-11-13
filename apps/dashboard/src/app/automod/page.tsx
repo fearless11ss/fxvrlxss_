@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 const navigation = [
   ["Обзор", "/"],
   ["Автомодерация", "/automod"],
-  ["Тикеты", "#tickets"],
+  ["Тикеты", "/tickets"],
   ["Голосовые", "#voice"],
   ["Правила и навигация", "#rules"],
   ["Логи", "#logs"],

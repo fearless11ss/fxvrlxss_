@@ -4,6 +4,7 @@ import {
   integer,
   jsonb,
   primaryKey,
+  serial,
   pgEnum,
   pgTable,
   text,
@@ -128,6 +129,7 @@ export const tickets = pgTable(
   "tickets",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    number: serial("number").notNull(),
     guildId: text("guild_id").notNull(),
     channelId: text("channel_id").notNull(),
     authorId: text("author_id").notNull(),
@@ -135,14 +137,29 @@ export const tickets = pgTable(
     type: text("type").notNull(),
     status: ticketStatus("status").default("open").notNull(),
     subject: text("subject").notNull(),
+    description: text("description").notNull(),
+    controlMessageId: text("control_message_id"),
+    participantIds: jsonb("participant_ids")
+      .$type<string[]>()
+      .default([])
+      .notNull(),
     closeReason: text("close_reason"),
+    transcript: jsonb("transcript"),
     autoCloseDisabled: boolean("auto_close_disabled").default(false).notNull(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
     closedAt: timestamp("closed_at", { withTimezone: true }),
+    reopenedAt: timestamp("reopened_at", { withTimezone: true }),
     ...timestamps,
   },
   (table) => [
     uniqueIndex("tickets_channel_unique").on(table.channelId),
+    uniqueIndex("tickets_number_unique").on(table.number),
     index("tickets_author_status_idx").on(table.authorId, table.status),
+    index("tickets_status_activity_idx").on(
+      table.guildId,
+      table.status,
+      table.updatedAt,
+    ),
   ],
 );
 

@@ -57,6 +57,13 @@ The following order is canonical and protected by an automated test.
 The bot permanently has Administrator by explicit owner decision. Its token is
 therefore treated as a root-equivalent secret.
 
+## Support flow
+
+`открыть-тикет` contains one pinned Components V2 panel. New private text
+channels are created directly under `ПОДДЕРЖКА`, numbered sequentially, and
+retained after closing for staff review. The four default routes are documented
+in [the ticket module](../modules/tickets.md).
+
 ## Entry flow
 
 New members see only `прихожая`, `правила`, and `навигация`. After Discord rule

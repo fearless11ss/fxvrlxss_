@@ -32,6 +32,7 @@ flowchart LR
 | Audit journal             | Append and query events       | PostgreSQL schema, retention, filtering         |
 | Audit dispatch            | Publish one ordered event     | Discord routing, persistence, failure isolation |
 | Guild resource catalog    | Replace one guild snapshot    | Discord names, categories, ordering, stale rows |
+| Ticket workflow           | Advance one ticket lifecycle  | Discord channels, permissions, transcripts      |
 | Discord adapter           | Apply desired state           | Rate limits, hierarchy, retries, audit reasons  |
 
 The pure domain package contains policy and desired state. Discord and
@@ -52,3 +53,4 @@ PostgreSQL are adapters at explicit seams, not dependencies of the policy.
 - [Repository map](repository-map.md)
 - [Discord structure](../discord/server-structure.md)
 - [Automoderation](../modules/automod.md)
+- [Tickets](../modules/tickets.md)

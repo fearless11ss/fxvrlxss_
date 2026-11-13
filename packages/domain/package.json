@@ -15,6 +15,10 @@
     "./moderation": {
       "types": "./src/moderation.ts",
       "import": "./dist/moderation.js"
+    },
+    "./ticket-config": {
+      "types": "./src/ticket-config.ts",
+      "import": "./dist/ticket-config.js"
     }
   },
   "scripts": {

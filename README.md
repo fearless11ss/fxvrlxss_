@@ -14,6 +14,7 @@ Private control plane, Discord bot, and operational tooling for the
 - [Architecture](docs/architecture/overview.md)
 - [Discord server structure](docs/discord/server-structure.md)
 - [Automoderation module](docs/modules/automod.md)
+- [Ticket module](docs/modules/tickets.md)
 - [Design system](docs/design/design-system.md)
 - [Deployment](docs/operations/deployment.md)
 

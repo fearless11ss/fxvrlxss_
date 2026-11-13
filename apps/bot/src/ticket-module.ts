@@ -1,0 +1,769 @@
+import {
+  defaultTicketConfig,
+  ticketConfigSchema,
+  type TicketConfig,
+  type TicketTypeKey,
+} from "@fxvrlxss/domain/ticket-config";
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ChannelType,
+  ContainerBuilder,
+  LabelBuilder,
+  MessageFlags,
+  ModalBuilder,
+  PermissionFlagsBits,
+  StringSelectMenuBuilder,
+  TextDisplayBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  UserSelectMenuBuilder,
+  escapeMarkdown,
+  type Guild,
+  type GuildMember,
+  type Interaction,
+  type Message,
+  type TextChannel,
+} from "discord.js";
+import type { Logger } from "pino";
+
+import type { AuditBus } from "./audit.js";
+import type { GuildResources } from "./guild-resources.js";
+import type { TicketConfigurationApplier } from "./ticket-publication.js";
+import type {
+  TicketRecord,
+  TicketRepository,
+  TicketTranscriptEntry,
+} from "./ticket-repository.js";
+
+const PANEL_SELECT_ID = "ticket:type";
+const OPEN_MODAL_PREFIX = "ticket:create:";
+const CLOSE_MODAL_ID = "ticket:close:submit";
+const ACTIVE_STATES = new Set(["claimed", "open", "reopened"]);
+
+function ticketNumber(value: number): string {
+  return String(value).padStart(4, "0");
+}
+
+function ticketType(config: TicketConfig, key: string) {
+  return config.types.find((type) => type.key === key);
+}
+
+export function buildTicketPanel(config: TicketConfig): ContainerBuilder[] {
+  const enabledTypes = config.types.filter((type) => type.enabled);
+  const options =
+    enabledTypes.length > 0
+      ? enabledTypes.map((type) => ({
+          description: type.description,
+          label: type.label,
+          value: type.key,
+        }))
+      : [
+          {
+            description: "Включите хотя бы один тип обращения в панели.",
+            label: "Нет доступных обращений",
+            value: "unavailable",
+          },
+        ];
+  const select = new StringSelectMenuBuilder()
+    .setCustomId(PANEL_SELECT_ID)
+    .setDisabled(!config.enabled || enabledTypes.length === 0)
+    .setMaxValues(1)
+    .setMinValues(1)
+    .setPlaceholder(
+      config.enabled ? "Выберите тему обращения" : "Тикеты временно отключены",
+    )
+    .addOptions(options);
+  const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+    select,
+  );
+  return [
+    new ContainerBuilder()
+      .setAccentColor(0xf2f2ef)
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(
+          `## ${escapeMarkdown(config.panelTitle)}\n${escapeMarkdown(config.panelDescription)}`,
+        ),
+      )
+      .addActionRowComponents(row),
+  ];
+}
+
+export function buildTicketControls(
+  ticket: TicketRecord,
+  config: TicketConfig,
+): ContainerBuilder[] {
+  const type = ticketType(config, ticket.type);
+  const closed = ticket.status === "closed";
+  const row = new ActionRowBuilder<ButtonBuilder>();
+  if (closed) {
+    if (config.allowReopen) {
+      row.addComponents(
+        new ButtonBuilder()
+          .setCustomId("ticket:reopen")
+          .setLabel("Открыть повторно")
+          .setStyle(ButtonStyle.Secondary),
+      );
+    }
+  } else {
+    row.addComponents(
+      new ButtonBuilder()
+        .setCustomId("ticket:claim")
+        .setDisabled(ticket.status === "claimed")
+        .setLabel(ticket.status === "claimed" ? "Назначен" : "Взять")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("ticket:participant:add:open")
+        .setLabel("Добавить")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("ticket:participant:remove:open")
+        .setLabel("Удалить")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("ticket:close")
+        .setLabel("Закрыть")
+        .setStyle(ButtonStyle.Danger),
+    );
+  }
+
+  const status =
+    ticket.status === "claimed"
+      ? `Назначен: <@${ticket.assignedToId}>`
+      : ticket.status === "closed"
+        ? "Закрыт"
+        : ticket.status === "reopened"
+          ? "Открыт повторно"
+          : "Ожидает сотрудника";
+  const container = new ContainerBuilder()
+    .setAccentColor(closed ? 0x737370 : 0xf2f2ef)
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(
+        [
+          `## Тикет #${ticketNumber(ticket.number)} · ${escapeMarkdown(type?.label ?? ticket.type)}`,
+          `Автор: <@${ticket.authorId}>`,
+          `Статус: ${status}`,
+          `**${escapeMarkdown(ticket.subject)}**`,
+          escapeMarkdown(ticket.description),
+        ].join("\n"),
+      ),
+    );
+  if (row.components.length > 0) container.addActionRowComponents(row);
+  return [container];
+}
+
+function openTicketModal(type: TicketTypeKey, label: string): ModalBuilder {
+  return new ModalBuilder()
+    .setCustomId(`${OPEN_MODAL_PREFIX}${type}`)
+    .setTitle(label)
+    .addLabelComponents(
+      new LabelBuilder()
+        .setLabel("Тема")
+        .setDescription("Коротко опишите, с чем вы обращаетесь.")
+        .setTextInputComponent(
+          new TextInputBuilder()
+            .setCustomId("subject")
+            .setMaxLength(100)
+            .setMinLength(3)
+            .setRequired(true)
+            .setStyle(TextInputStyle.Short),
+        ),
+      new LabelBuilder()
+        .setLabel("Описание")
+        .setDescription("Добавьте детали, ссылки и важный контекст.")
+        .setTextInputComponent(
+          new TextInputBuilder()
+            .setCustomId("description")
+            .setMaxLength(1_500)
+            .setMinLength(10)
+            .setRequired(true)
+            .setStyle(TextInputStyle.Paragraph),
+        ),
+    );
+}
+
+function closeTicketModal(): ModalBuilder {
+  return new ModalBuilder()
+    .setCustomId(CLOSE_MODAL_ID)
+    .setTitle("Закрыть тикет")
+    .addLabelComponents(
+      new LabelBuilder()
+        .setLabel("Причина закрытия")
+        .setTextInputComponent(
+          new TextInputBuilder()
+            .setCustomId("reason")
+            .setMaxLength(300)
+            .setMinLength(3)
+            .setRequired(true)
+            .setStyle(TextInputStyle.Paragraph),
+        ),
+    );
+}
+
+async function transcript(
+  channel: TextChannel,
+): Promise<readonly TicketTranscriptEntry[]> {
+  const entries: TicketTranscriptEntry[] = [];
+  let before: string | undefined;
+  while (true) {
+    const batch = await channel.messages.fetch({
+      ...(before ? { before } : {}),
+      limit: 100,
+    });
+    for (const message of batch.values()) {
+      entries.push({
+        attachments: message.attachments.map((attachment) => ({
+          name: attachment.name,
+          size: attachment.size,
+          url: attachment.url,
+        })),
+        authorId: message.author.id,
+        content: message.content,
+        createdAt: message.createdAt.toISOString(),
+        messageId: message.id,
+      });
+    }
+    if (batch.size < 100) break;
+    before = batch.last()?.id;
+    if (!before) break;
+  }
+  return entries.sort((left, right) =>
+    left.createdAt.localeCompare(right.createdAt),
+  );
+}
+
+export class TicketModule implements TicketConfigurationApplier {
+  readonly #audit: AuditBus;
+  readonly #guild: Guild;
+  readonly #logger: Logger;
+  readonly #repository: TicketRepository;
+  readonly #resources: GuildResources;
+  #config: TicketConfig = defaultTicketConfig;
+  #timer: NodeJS.Timeout | undefined;
+
+  constructor(options: {
+    readonly audit: AuditBus;
+    readonly guild: Guild;
+    readonly logger: Logger;
+    readonly repository: TicketRepository;
+    readonly resources: GuildResources;
+  }) {
+    this.#audit = options.audit;
+    this.#guild = options.guild;
+    this.#logger = options.logger;
+    this.#repository = options.repository;
+    this.#resources = options.resources;
+    this.#config = {
+      ...defaultTicketConfig,
+      staffRoleIds: options.guild.roles.cache
+        .filter((role) =>
+          ["Владелец", "Куратор", "Модератор", "Испытательный срок"].includes(
+            role.name,
+          ),
+        )
+        .map((role) => role.id),
+    };
+  }
+
+  async start(): Promise<void> {
+    await this.#ensurePanel();
+    this.#timer = setInterval(() => void this.#closeInactive(), 60_000);
+    this.#timer.unref();
+  }
+
+  stop(): Promise<void> {
+    if (this.#timer) clearInterval(this.#timer);
+    this.#timer = undefined;
+    return Promise.resolve();
+  }
+
+  async apply(config: TicketConfig): Promise<void> {
+    this.#config = ticketConfigSchema.parse(config);
+    await this.#ensurePanel();
+  }
+
+  async handleMessage(message: Message): Promise<boolean> {
+    if (message.author.bot) return false;
+    const ticket = await this.#repository.findByChannel(message.channelId);
+    if (!ticket) return false;
+    await this.#repository.touch(message.channelId);
+    return true;
+  }
+
+  async handleInteraction(interaction: Interaction): Promise<boolean> {
+    if (interaction.guildId !== this.#guild.id) return false;
+    const customId =
+      interaction.isMessageComponent() || interaction.isModalSubmit()
+        ? interaction.customId
+        : "";
+    if (!customId.startsWith("ticket:")) return false;
+
+    if (interaction.isStringSelectMenu() && customId === PANEL_SELECT_ID) {
+      const key = interaction.values[0];
+      const type = key ? ticketType(this.#config, key) : undefined;
+      if (!this.#config.enabled || !type?.enabled) {
+        await interaction.reply({
+          content: "Этот тип обращения сейчас недоступен.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return true;
+      }
+      await interaction.showModal(openTicketModal(type.key, type.label));
+      return true;
+    }
+
+    if (interaction.isModalSubmit() && customId.startsWith(OPEN_MODAL_PREFIX)) {
+      await this.#createTicket(
+        interaction,
+        customId.slice(OPEN_MODAL_PREFIX.length),
+      );
+      return true;
+    }
+
+    const ticket = interaction.channelId
+      ? await this.#repository.findByChannel(interaction.channelId)
+      : null;
+    if (!ticket) {
+      if (interaction.isRepliable()) {
+        await interaction.reply({
+          content: "Тикет для этого канала не найден.",
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+      return true;
+    }
+    const member = await this.#guild.members.fetch(interaction.user.id);
+    const staff = this.#isStaff(member);
+
+    if (interaction.isButton() && customId === "ticket:claim") {
+      if (!(await this.#requireStaff(interaction, staff))) return true;
+      const updated = await this.#repository.claim(ticket.channelId, member.id);
+      if (!updated) {
+        await interaction.reply({
+          content: "Тикет уже назначен или закрыт.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return true;
+      }
+      await this.#updateControl(updated);
+      await interaction.reply({
+        content: `Тикет назначен на <@${member.id}>.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      await this.#audit.publish({
+        actor: { id: member.id, kind: "user" },
+        category: "bot",
+        discord: true,
+        eventType: "ticket.claimed",
+        subject: { id: ticket.channelId, kind: "channel" },
+        summary: `Тикет #${ticketNumber(ticket.number)} назначен на <@${member.id}>.`,
+        title: "Тикет назначен",
+      });
+      return true;
+    }
+
+    if (interaction.isButton() && customId === "ticket:close") {
+      if (!staff && interaction.user.id !== ticket.authorId) {
+        await interaction.reply({
+          content: "Закрыть тикет может его автор или сотрудник.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return true;
+      }
+      await interaction.showModal(closeTicketModal());
+      return true;
+    }
+
+    if (interaction.isModalSubmit() && customId === CLOSE_MODAL_ID) {
+      if (!staff && interaction.user.id !== ticket.authorId) {
+        await interaction.reply({
+          content: "Закрыть тикет может его автор или сотрудник.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return true;
+      }
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      await this.#closeTicket(
+        ticket,
+        interaction.fields.getTextInputValue("reason"),
+        interaction.user.id,
+      );
+      await interaction.editReply("Тикет закрыт, транскрипт сохранён.");
+      return true;
+    }
+
+    if (interaction.isButton() && customId === "ticket:reopen") {
+      if (!(await this.#requireStaff(interaction, staff))) return true;
+      const updated = await this.#repository.reopen(ticket.channelId);
+      if (!updated) {
+        await interaction.reply({
+          content: "Тикет уже открыт.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return true;
+      }
+      await this.#setMemberSendPermissions(updated, true);
+      await this.#updateControl(updated);
+      await interaction.reply({
+        content: "Тикет снова открыт.",
+        flags: MessageFlags.Ephemeral,
+      });
+      await this.#audit.publish({
+        actor: { id: member.id, kind: "user" },
+        category: "bot",
+        discord: true,
+        eventType: "ticket.reopened",
+        subject: { id: ticket.channelId, kind: "channel" },
+        summary: `Тикет #${ticketNumber(ticket.number)} открыт повторно.`,
+        title: "Тикет открыт повторно",
+      });
+      return true;
+    }
+
+    if (
+      interaction.isButton() &&
+      [
+        "ticket:participant:add:open",
+        "ticket:participant:remove:open",
+      ].includes(customId)
+    ) {
+      if (!(await this.#requireStaff(interaction, staff))) return true;
+      const adding = customId.includes(":add:");
+      const select = new UserSelectMenuBuilder()
+        .setCustomId(
+          adding ? "ticket:participant:add" : "ticket:participant:remove",
+        )
+        .setMaxValues(1)
+        .setMinValues(1)
+        .setPlaceholder(
+          adding ? "Кого добавить в тикет" : "Кого удалить из тикета",
+        );
+      await interaction.reply({
+        components: [
+          new ContainerBuilder()
+            .setAccentColor(0xf2f2ef)
+            .addTextDisplayComponents(
+              new TextDisplayBuilder().setContent(
+                adding
+                  ? "## Добавить участника\nВыберите пользователя, которому нужен доступ к тикету."
+                  : "## Удалить участника\nВыберите пользователя, у которого нужно забрать доступ.",
+              ),
+            )
+            .addActionRowComponents(
+              new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(
+                select,
+              ),
+            ),
+        ],
+        flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+      });
+      return true;
+    }
+
+    if (interaction.isUserSelectMenu()) {
+      if (!(await this.#requireStaff(interaction, staff))) return true;
+      const selected = interaction.users.first();
+      if (!selected || selected.bot || selected.id === ticket.authorId) {
+        await interaction.reply({
+          content: "Выберите обычного участника, который не является автором.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return true;
+      }
+      const adding = customId === "ticket:participant:add";
+      const participants = new Set(ticket.participantIds);
+      if (adding) participants.add(selected.id);
+      else participants.delete(selected.id);
+      const channel = await this.#textChannel(ticket.channelId);
+      if (adding) {
+        await channel.permissionOverwrites.edit(selected.id, {
+          AttachFiles: true,
+          ReadMessageHistory: true,
+          SendMessages: true,
+          ViewChannel: true,
+        });
+      } else {
+        await channel.permissionOverwrites.delete(selected.id);
+      }
+      await this.#repository.setParticipants(ticket.channelId, [
+        ...participants,
+      ]);
+      await interaction.update({
+        components: [
+          new ContainerBuilder()
+            .setAccentColor(0xf2f2ef)
+            .addTextDisplayComponents(
+              new TextDisplayBuilder().setContent(
+                `## Готово\n${adding ? "Добавлен" : "Удалён"} <@${selected.id}>.`,
+              ),
+            ),
+        ],
+      });
+      await this.#audit.publish({
+        actor: { id: member.id, kind: "user" },
+        category: "bot",
+        discord: true,
+        eventType: adding
+          ? "ticket.participant_added"
+          : "ticket.participant_removed",
+        subject: { id: ticket.channelId, kind: "channel" },
+        summary: `${adding ? "Добавлен" : "Удалён"} участник <@${selected.id}> в тикете #${ticketNumber(ticket.number)}.`,
+        title: adding
+          ? "Участник добавлен в тикет"
+          : "Участник удалён из тикета",
+      });
+      return true;
+    }
+
+    return true;
+  }
+
+  async #ensurePanel(): Promise<void> {
+    const channel = await this.#textChannel(
+      this.#resources.channels.support.openTicket,
+    );
+    const pins = await channel.messages.fetchPins({ limit: 50 });
+    const existing = pins.items
+      .map(({ message }) => message)
+      .find(
+        (message) =>
+          message.author.id === this.#guild.client.user.id &&
+          JSON.stringify(
+            message.components.map((item) => item.toJSON()),
+          ).includes(PANEL_SELECT_ID),
+      );
+    if (existing) {
+      await existing.edit({
+        allowedMentions: { parse: [] },
+        components: buildTicketPanel(this.#config),
+        flags: MessageFlags.IsComponentsV2,
+      });
+      return;
+    }
+    const panel = await channel.send({
+      allowedMentions: { parse: [] },
+      components: buildTicketPanel(this.#config),
+      flags: MessageFlags.IsComponentsV2,
+    });
+    await panel.pin("fxvrlxss_ ticket panel");
+  }
+
+  async #createTicket(
+    interaction: Extract<Interaction, { fields: unknown }>,
+    typeKey: string,
+  ): Promise<void> {
+    const type = ticketType(this.#config, typeKey);
+    if (
+      !this.#config.enabled ||
+      !type?.enabled ||
+      !interaction.isModalSubmit()
+    ) {
+      await interaction.reply({
+        content: "Этот тип обращения сейчас недоступен.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const reservation = await this.#repository.reserve({
+      authorId: interaction.user.id,
+      description: interaction.fields.getTextInputValue("description"),
+      guildId: this.#guild.id,
+      maxOpenTickets: this.#config.maxOpenTicketsPerUser,
+      subject: interaction.fields.getTextInputValue("subject"),
+      type: type.key,
+    });
+    if (!reservation.success) {
+      await interaction.editReply(
+        reservation.reason === "duplicate-type"
+          ? "У вас уже есть открытый тикет этого типа."
+          : `Достигнут лимит открытых тикетов: ${this.#config.maxOpenTicketsPerUser}.`,
+      );
+      return;
+    }
+
+    let channel: TextChannel | undefined;
+    try {
+      channel = await this.#guild.channels.create({
+        name: `тикет-${ticketNumber(reservation.record.number)}`,
+        parent: this.#resources.channels.support.category,
+        permissionOverwrites: [
+          {
+            deny: [PermissionFlagsBits.ViewChannel],
+            id: this.#guild.roles.everyone.id,
+          },
+          {
+            allow: [
+              PermissionFlagsBits.AttachFiles,
+              PermissionFlagsBits.ReadMessageHistory,
+              PermissionFlagsBits.SendMessages,
+              PermissionFlagsBits.ViewChannel,
+            ],
+            id: interaction.user.id,
+          },
+          ...this.#config.staffRoleIds
+            .filter((id) => this.#guild.roles.cache.has(id))
+            .map((id) => ({
+              allow: [
+                PermissionFlagsBits.AttachFiles,
+                PermissionFlagsBits.ReadMessageHistory,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.ViewChannel,
+              ],
+              id,
+            })),
+        ],
+        reason: `fxvrlxss_ ticket #${reservation.record.number}`,
+        topic: `Тикет #${ticketNumber(reservation.record.number)} · ${type.label} · ${interaction.user.id}`,
+        type: ChannelType.GuildText,
+      });
+      const active = await this.#repository.activate(
+        reservation.record.id,
+        channel.id,
+      );
+      const control = await channel.send({
+        allowedMentions: { users: [interaction.user.id] },
+        components: buildTicketControls(active, this.#config),
+        flags: MessageFlags.IsComponentsV2,
+      });
+      await this.#repository.setControlMessage(channel.id, control.id);
+      await interaction.editReply(`Тикет создан: <#${channel.id}>`);
+      await this.#audit.publish({
+        actor: { id: interaction.user.id, kind: "user" },
+        category: "bot",
+        discord: true,
+        eventType: "ticket.opened",
+        subject: { id: channel.id, kind: "channel" },
+        summary: `Открыт тикет #${ticketNumber(active.number)} · ${escapeMarkdown(type.label)}. Автор: <@${interaction.user.id}>.`,
+        title: "Тикет открыт",
+      });
+    } catch (error) {
+      if (channel)
+        await channel.delete("Ticket creation failed").catch(() => undefined);
+      await this.#repository.abandon(reservation.record.id);
+      throw error;
+    }
+  }
+
+  #isStaff(member: GuildMember): boolean {
+    return (
+      member.permissions.has(PermissionFlagsBits.Administrator) ||
+      member.roles.cache.some((role) =>
+        this.#config.staffRoleIds.includes(role.id),
+      )
+    );
+  }
+
+  async #requireStaff(
+    interaction: Extract<Interaction, { reply: unknown }>,
+    staff: boolean,
+  ): Promise<boolean> {
+    if (staff) return true;
+    if (interaction.isRepliable()) {
+      await interaction.reply({
+        content: "Это действие доступно только команде сервера.",
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+    return false;
+  }
+
+  async #textChannel(channelId: string): Promise<TextChannel> {
+    const channel = await this.#guild.channels.fetch(channelId);
+    if (!channel || channel.type !== ChannelType.GuildText) {
+      throw new Error(`Ticket text channel is unavailable: ${channelId}`);
+    }
+    return channel;
+  }
+
+  async #updateControl(ticket: TicketRecord): Promise<void> {
+    if (!ticket.controlMessageId) return;
+    const channel = await this.#textChannel(ticket.channelId);
+    await channel.messages.edit(ticket.controlMessageId, {
+      allowedMentions: { parse: [] },
+      components: buildTicketControls(ticket, this.#config),
+      flags: MessageFlags.IsComponentsV2,
+    });
+  }
+
+  async #setMemberSendPermissions(
+    ticket: TicketRecord,
+    enabled: boolean,
+  ): Promise<void> {
+    const channel = await this.#textChannel(ticket.channelId);
+    for (const userId of [ticket.authorId, ...ticket.participantIds]) {
+      await channel.permissionOverwrites.edit(userId, {
+        SendMessages: enabled,
+        ViewChannel: true,
+      });
+    }
+  }
+
+  async #closeTicket(
+    ticket: TicketRecord,
+    reason: string,
+    actorId?: string,
+  ): Promise<void> {
+    if (!ACTIVE_STATES.has(ticket.status)) return;
+    const channel = await this.#textChannel(ticket.channelId);
+    const snapshot = this.#config.transcriptEnabled
+      ? await transcript(channel)
+      : null;
+    const closed = await this.#repository.close(
+      ticket.channelId,
+      reason,
+      snapshot,
+    );
+    if (!closed) return;
+    await this.#setMemberSendPermissions(closed, false);
+    await this.#updateControl(closed);
+    await channel.send({
+      allowedMentions: { parse: [] },
+      components: [
+        new ContainerBuilder()
+          .setAccentColor(0x737370)
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+              `## Тикет закрыт\nПричина: ${escapeMarkdown(reason)}`,
+            ),
+          ),
+      ],
+      flags: MessageFlags.IsComponentsV2,
+    });
+    await this.#audit.publish({
+      ...(actorId ? { actor: { id: actorId, kind: "user" } as const } : {}),
+      category: "bot",
+      discord: true,
+      eventType: "ticket.closed",
+      payload: { reason, transcriptEntries: snapshot?.length ?? 0 },
+      subject: { id: ticket.channelId, kind: "channel" },
+      summary: `Закрыт тикет #${ticketNumber(ticket.number)}. Причина: ${escapeMarkdown(reason)}.`,
+      title: "Тикет закрыт",
+    });
+  }
+
+  async #closeInactive(): Promise<void> {
+    if (!this.#config.enabled || this.#config.autoCloseHours === 0) return;
+    const cutoff = new Date(
+      Date.now() - this.#config.autoCloseHours * 60 * 60 * 1_000,
+    );
+    const inactive = await this.#repository.findInactive(
+      this.#guild.id,
+      cutoff,
+    );
+    for (const ticket of inactive) {
+      try {
+        await this.#closeTicket(
+          ticket,
+          `Нет активности ${this.#config.autoCloseHours} ч.`,
+        );
+      } catch (error) {
+        this.#logger.error(
+          { channelId: ticket.channelId, error },
+          "inactive ticket close failed",
+        );
+      }
+    }
+  }
+}

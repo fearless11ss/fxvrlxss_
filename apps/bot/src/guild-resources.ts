@@ -6,6 +6,10 @@ export interface GuildResources {
     readonly logs: Readonly<
       Record<"security" | "moderation" | "messages" | "server" | "bot", string>
     >;
+    readonly support: {
+      readonly category: string;
+      readonly openTicket: string;
+    };
   };
   readonly roles: {
     readonly member: string;
@@ -50,6 +54,16 @@ function requireTextChannel(
   return channel.id;
 }
 
+function requireCategory(guild: Guild, name: string): string {
+  const category = guild.channels.cache.find(
+    (candidate) =>
+      candidate.type === ChannelType.GuildCategory && candidate.name === name,
+  );
+  if (!category)
+    throw new Error(`Required Discord category is missing: ${name}`);
+  return category.id;
+}
+
 export async function resolveGuildResources(
   guild: Guild,
 ): Promise<GuildResources> {
@@ -63,6 +77,10 @@ export async function resolveGuildResources(
         messages: requireTextChannel(guild, "сообщения", "ЛОГИ"),
         server: requireTextChannel(guild, "сервер", "ЛОГИ"),
         bot: requireTextChannel(guild, "бот", "ЛОГИ"),
+      },
+      support: {
+        category: requireCategory(guild, "ПОДДЕРЖКА"),
+        openTicket: requireTextChannel(guild, "открыть-тикет", "ПОДДЕРЖКА"),
       },
     },
     roles: {

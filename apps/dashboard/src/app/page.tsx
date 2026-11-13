@@ -6,7 +6,7 @@ import { logoutAction } from "./logout-action";
 const navigation = [
   ["Обзор", "/"],
   ["Автомодерация", "/automod"],
-  ["Тикеты", "tickets"],
+  ["Тикеты", "/tickets"],
   ["Голосовые", "voice"],
   ["Правила и навигация", "rules"],
   ["Логи", "logs"],
@@ -25,7 +25,7 @@ const modules = [
     detail: "Режим наблюдения",
     state: "Наблюдение",
   },
-  { name: "Тикеты", detail: "3 типа обращений", state: "Работает" },
+  { name: "Тикеты", detail: "4 типа обращений", state: "Работает" },
   { name: "Временные комнаты", detail: "0 комнат сейчас", state: "Работает" },
 ] as const;
 

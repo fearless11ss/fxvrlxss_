@@ -4,7 +4,7 @@ tags:
   - fxvrlxss
   - status
 status: active
-updated: 2026-11-13
+updated: 2026-11-14
 ---
 
 # Implementation status
@@ -37,7 +37,7 @@ updated: 2026-11-13
 - [x] Searchable role and channel selectors backed by a bot-synchronized catalog
 - [ ] Moderation sanctions, points, evidence, and appeals
 - [x] Split Discord log routing and full database event journal foundation
-- [ ] Ticket workflow and transcripts
+- [x] Versioned ticket panel, private channels, staff workflow, and transcripts
 - [ ] Temporary voice-room lifecycle
 - [x] Additive staging guild blueprint reconciliation and dry-run
 - [ ] Destructive production cleanup dry-run

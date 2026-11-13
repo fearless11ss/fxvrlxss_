@@ -728,7 +728,8 @@ textarea:focus-visible {
 }
 
 .loginForm label,
-.automodForm label {
+.automodForm label,
+.ticketForm label {
   display: grid;
   gap: 8px;
   color: var(--ash);
@@ -738,7 +739,10 @@ textarea:focus-visible {
 .loginForm input,
 .automodForm input,
 .automodForm select,
-.automodForm textarea {
+.automodForm textarea,
+.ticketForm input,
+.ticketForm select,
+.ticketForm textarea {
   min-height: 44px;
   padding: 10px 12px;
 }
@@ -1221,6 +1225,99 @@ textarea:focus-visible {
   font-size: 12px;
 }
 
+.ticketForm {
+  padding-bottom: 16px;
+}
+
+.ticketSettings,
+.ticketTypes {
+  padding-top: 54px;
+}
+
+.ticketSettings .sectionHeader,
+.ticketTypes .sectionHeader {
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--steel);
+}
+
+.ticketSettings .sectionHeader h2,
+.ticketTypes .sectionHeader h2 {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.ticketSettingsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px 32px;
+  padding: 30px 0 38px;
+}
+
+.ticketSettingsGrid small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.ticketWideField {
+  grid-column: 1 / -1;
+}
+
+.ticketChecks {
+  display: grid;
+  align-content: center;
+  gap: 18px;
+  padding-top: 19px;
+}
+
+.ticketChecks input {
+  width: 17px;
+  min-height: 17px;
+  margin: 0;
+  accent-color: var(--bone);
+}
+
+.ticketTypeGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-left: 1px solid var(--steel);
+}
+
+.ticketTypeCard {
+  min-width: 0;
+  border-right: 1px solid var(--steel);
+  border-bottom: 1px solid var(--steel);
+}
+
+.ticketTypeHeader {
+  display: flex;
+  min-height: 62px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--steel);
+}
+
+.ticketTypeHeader > span {
+  color: var(--muted);
+  font-family: var(--display);
+  font-size: 18px;
+}
+
+.ticketTypeCard > div {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+}
+
+.ticketTypeCard textarea {
+  resize: vertical;
+}
+
+.ticketForm .formFooter {
+  margin-top: 42px;
+}
+
 @media (max-width: 1240px) {
   .mobilePublication {
     display: flex;
@@ -1229,8 +1326,22 @@ textarea:focus-visible {
 
 @media (max-width: 900px) {
   .ruleGrid,
-  .exemptionGrid {
+  .exemptionGrid,
+  .ticketSettingsGrid,
+  .ticketTypeGrid {
     grid-template-columns: 1fr;
+  }
+
+  .ticketWideField {
+    grid-column: auto;
+  }
+
+  .ticketTypeGrid {
+    border-left: 0;
+  }
+
+  .ticketTypeCard {
+    border-left: 1px solid var(--steel);
   }
 
   .ruleCard {

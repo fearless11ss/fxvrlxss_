@@ -31,6 +31,8 @@ assets/         User-provided visual references
   [server structure](../discord/server-structure.md).
 - Automod ownership is defined by the
   [automoderation module](../modules/automod.md).
+- Ticket ownership and lifecycle are defined by the
+  [ticket module](../modules/tickets.md).
 - Deployment decisions live in [deployment](../operations/deployment.md).
 
 > [!WARNING]

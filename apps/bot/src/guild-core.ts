@@ -34,6 +34,10 @@ import {
   collectGuildResourceCatalog,
   type GuildResourceCatalogWriter,
 } from "./guild-resource-catalog.js";
+import { TicketModule } from "./ticket-module.js";
+import type { TicketPublicationRepository } from "./ticket-publication.js";
+import { TicketPublicationWorker } from "./ticket-publication.js";
+import type { TicketRepository } from "./ticket-repository.js";
 
 export interface GuildCore {
   readonly audit: AuditBus;
@@ -48,6 +52,8 @@ export interface GuildCoreOptions {
   readonly guildResourceCatalogWriter?: GuildResourceCatalogWriter;
   readonly logger: Logger;
   readonly persistentWriters?: readonly AuditWriter[];
+  readonly ticketPublicationRepository?: TicketPublicationRepository;
+  readonly ticketRepository?: TicketRepository;
 }
 
 function isAutomodExempt(message: Message, runtime: AutomodRuntime): boolean {
@@ -241,10 +247,29 @@ export async function startGuildCore(
     [...(options.persistentWriters ?? []), discordWriter],
     logger,
   );
+  const ticketModule = options.ticketRepository
+    ? new TicketModule({
+        audit,
+        guild,
+        logger,
+        repository: options.ticketRepository,
+        resources,
+      })
+    : undefined;
+  const ticketPublicationWorker =
+    ticketModule && options.ticketPublicationRepository
+      ? new TicketPublicationWorker({
+          applier: ticketModule,
+          logger,
+          repository: options.ticketPublicationRepository,
+        })
+      : undefined;
   const startedAt = new Date();
 
   await registerStatusCommand(guild);
   await publicationWorker?.start();
+  await ticketModule?.start();
+  await ticketPublicationWorker?.start();
 
   safeOn(Events.GuildMemberAdd, async (member) => {
     if (member.guild.id !== guildId || member.user.bot) return;
@@ -367,6 +392,7 @@ export async function startGuildCore(
       title: "Создано сообщение",
     });
 
+    if (await ticketModule?.handleMessage(message)) return;
     if (message.author.bot || isAutomodExempt(message, automodRuntime)) return;
     const decision = automodRuntime.inspect(toModerationMessage(message));
     if (decision.findings.length === 0) return;
@@ -770,6 +796,7 @@ export async function startGuildCore(
 
   safeOn(Events.InteractionCreate, async (interaction) => {
     if (interaction.guildId !== guildId) return;
+    if (await ticketModule?.handleInteraction(interaction)) return;
     const isStatusCommand =
       interaction.isChatInputCommand() && interaction.commandName === "статус";
     const isStatusRefresh =
@@ -816,6 +843,8 @@ export async function startGuildCore(
   return {
     audit,
     async stop() {
+      await ticketPublicationWorker?.stop();
+      await ticketModule?.stop();
       await publicationWorker?.stop();
       await eventGate.close();
       await audit.publish({
