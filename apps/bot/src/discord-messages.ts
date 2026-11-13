@@ -10,6 +10,7 @@ import {
 } from "discord.js";
 
 import type { AuditEvent, AuditWriter } from "./audit.js";
+import type { AuditDiscordEntity } from "./audit.js";
 import type { GuildResources } from "./guild-resources.js";
 
 const MAX_SUMMARY_LENGTH = 2_800;
@@ -29,11 +30,28 @@ function accentColor(event: AuditEvent): number {
   return 0xf2f2ef;
 }
 
+function discordEntity(entity: AuditDiscordEntity, guildId: string): string {
+  switch (entity.kind) {
+    case "channel":
+      return `<#${entity.id}>`;
+    case "message":
+      return `[сообщение](https://discord.com/channels/${guildId}/${entity.channelId}/${entity.id})`;
+    case "role":
+      return `<@&${entity.id}>`;
+    case "user":
+      return `<@${entity.id}>`;
+  }
+}
+
 export function buildAuditComponents(event: AuditEvent): ContainerBuilder[] {
   const metadata = [
     `Тип: \`${escapeMarkdown(event.eventType)}\``,
-    event.actorId ? `Исполнитель: \`${event.actorId}\`` : undefined,
-    event.subjectId ? `Объект: \`${event.subjectId}\`` : undefined,
+    event.actor
+      ? `Инициатор: ${discordEntity(event.actor, event.guildId)}`
+      : undefined,
+    event.subject
+      ? `Объект: ${discordEntity(event.subject, event.guildId)}`
+      : undefined,
     timestamp(event.occurredAt),
   ]
     .filter((value): value is string => Boolean(value))

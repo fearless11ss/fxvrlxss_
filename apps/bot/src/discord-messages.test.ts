@@ -9,6 +9,7 @@ import {
 } from "./discord-messages.js";
 
 const auditEvent: AuditEvent = {
+  actor: { id: "user-1", kind: "user" },
   category: "security",
   discord: true,
   eventType: "test.event",
@@ -16,6 +17,7 @@ const auditEvent: AuditEvent = {
   occurredAt: new Date("2026-11-13T08:00:00.000Z"),
   payload: {},
   severity: "warning",
+  subject: { channelId: "channel-1", id: "message-1", kind: "message" },
   summary: "Проверка события",
   title: "Тест",
 };
@@ -33,6 +35,25 @@ describe("Components V2 messages", () => {
         ({ type }) => type === ComponentType.TextDisplay,
       ),
     ).toBe(true);
+    expect(JSON.stringify(container)).toContain("<@user-1>");
+    expect(JSON.stringify(container)).toContain(
+      "https://discord.com/channels/guild-1/channel-1/message-1",
+    );
+    expect(JSON.stringify(container)).not.toContain("Исполнитель: `user-1`");
+  });
+
+  it("renders channels and roles as Discord mentions", () => {
+    const channel = buildAuditComponents({
+      ...auditEvent,
+      subject: { id: "channel-1", kind: "channel" },
+    })[0]?.toJSON();
+    const role = buildAuditComponents({
+      ...auditEvent,
+      subject: { id: "role-1", kind: "role" },
+    })[0]?.toJSON();
+
+    expect(JSON.stringify(channel)).toContain("<#channel-1>");
+    expect(JSON.stringify(role)).toContain("<@&role-1>");
   });
 
   it("builds lifecycle containers for joins and leaves", () => {

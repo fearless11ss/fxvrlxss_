@@ -5,14 +5,24 @@ export type AuditCategory =
 
 export type AuditSeverity = "info" | "warning" | "critical";
 
+export type AuditDiscordEntity =
+  | { readonly id: string; readonly kind: "channel" }
+  | { readonly id: string; readonly kind: "role" }
+  | { readonly id: string; readonly kind: "user" }
+  | {
+      readonly channelId: string;
+      readonly id: string;
+      readonly kind: "message";
+    };
+
 export interface NewAuditEvent {
-  readonly actorId?: string;
+  readonly actor?: AuditDiscordEntity;
   readonly category: AuditCategory;
   readonly discord: boolean;
   readonly eventType: string;
   readonly payload?: Readonly<Record<string, unknown>>;
   readonly severity?: AuditSeverity;
-  readonly subjectId?: string;
+  readonly subject?: AuditDiscordEntity;
   readonly summary: string;
   readonly title: string;
 }

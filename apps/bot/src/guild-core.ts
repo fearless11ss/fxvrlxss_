@@ -1,4 +1,5 @@
 import {
+  AutoModerationActionType,
   Events,
   MessageFlags,
   PermissionFlagsBits,
@@ -14,6 +15,7 @@ import type { Logger } from "pino";
 
 import { AuditBus, type AuditWriter } from "./audit.js";
 import { AsyncEventGate } from "./async-event-gate.js";
+import { automodActionLabel, buildAutomodLogSummary } from "./automod-log.js";
 import type { AutomodPublicationRepository } from "./automod-publication.js";
 import { AutomodPublicationWorker } from "./automod-publication.js";
 import { AutomodRuntime } from "./automod-runtime.js";
@@ -128,6 +130,19 @@ function messageExcerpt(content: string | null | undefined): string {
   return content.length > 700 ? `${content.slice(0, 699)}…` : content;
 }
 
+function discordAutomodActionLabel(action: AutoModerationActionType): string {
+  switch (action) {
+    case AutoModerationActionType.BlockMemberInteraction:
+      return "взаимодействия участника заблокированы";
+    case AutoModerationActionType.BlockMessage:
+      return "сообщение заблокировано";
+    case AutoModerationActionType.SendAlertMessage:
+      return "отправлено предупреждение в журнал";
+    case AutoModerationActionType.Timeout:
+      return "участнику выдан тайм-аут";
+  }
+}
+
 async function sendLifecycleMessage(
   client: Client,
   resources: GuildResources,
@@ -227,7 +242,7 @@ export async function startGuildCore(
           accountCreatedAt: member.user.createdAt.toISOString(),
           joinedAt: member.joinedAt?.toISOString(),
         },
-        subjectId: member.id,
+        subject: { id: member.id, kind: "user" },
         summary: `Участнику <@${member.id}> выдана роль \`Участник\`.`,
         title: "Участник присоединился",
       });
@@ -239,7 +254,7 @@ export async function startGuildCore(
         eventType: "member.onboarding_failed",
         payload: { error: String(error) },
         severity: "critical",
-        subjectId: member.id,
+        subject: { id: member.id, kind: "user" },
         summary: "Не удалось завершить автоматическую выдачу роли участника.",
         title: "Ошибка онбординга",
       });
@@ -257,7 +272,7 @@ export async function startGuildCore(
       category: "server",
       discord: true,
       eventType: "member.left",
-      subjectId: member.id,
+      subject: { id: member.id, kind: "user" },
       summary: `<@${member.id}> покинул сервер.`,
       title: "Участник вышел",
     });
@@ -296,7 +311,7 @@ export async function startGuildCore(
         timeoutAfter: after.communicationDisabledUntil?.toISOString(),
         timeoutBefore: before.communicationDisabledUntil?.toISOString(),
       },
-      subjectId: after.id,
+      subject: { id: after.id, kind: "user" },
       summary: [
         addedRoles.length > 0
           ? `Добавлены роли: ${addedRoles.join(", ")}.`
@@ -316,12 +331,16 @@ export async function startGuildCore(
   safeOn(Events.MessageCreate, async (message) => {
     if (message.guildId !== guildId) return;
     await audit.publish({
-      actorId: message.author.id,
+      actor: { id: message.author.id, kind: "user" },
       category: "messages",
       discord: false,
       eventType: "message.created",
       payload: messagePayload(message),
-      subjectId: message.id,
+      subject: {
+        channelId: message.channelId,
+        id: message.id,
+        kind: "message",
+      },
       summary: "Сообщение сохранено в полном журнале.",
       title: "Создано сообщение",
     });
@@ -330,7 +349,7 @@ export async function startGuildCore(
     const decision = automodRuntime.inspect(toModerationMessage(message));
     if (decision.findings.length === 0) return;
     await audit.publish({
-      actorId: message.author.id,
+      actor: { id: message.author.id, kind: "user" },
       category: "security",
       discord: true,
       eventType: "moderation.signals_observed",
@@ -341,9 +360,17 @@ export async function startGuildCore(
         messageId: message.id,
       },
       severity: "warning",
-      subjectId: message.id,
-      summary: `Обнаружено сигналов: ${decision.findings.length}. Действие: ${decision.action}.`,
-      title: "Сигналы автомодерации",
+      subject: {
+        channelId: message.channelId,
+        id: message.id,
+        kind: "message",
+      },
+      summary: buildAutomodLogSummary(
+        automodRuntime.config,
+        decision,
+        message.channelId,
+      ),
+      title: "Сработала автомодерация",
     });
     if (decision.action === "observe") return;
     try {
@@ -354,7 +381,6 @@ export async function startGuildCore(
         resources.roles.quarantine,
       );
       await audit.publish({
-        actorId: message.author.id,
         category: "moderation",
         discord: true,
         eventType: "moderation.action_applied",
@@ -364,20 +390,29 @@ export async function startGuildCore(
           messageId: message.id,
         },
         severity: "warning",
-        subjectId: message.author.id,
-        summary: `Применено действие: ${decision.action}.`,
+        subject: { id: message.author.id, kind: "user" },
+        summary: buildAutomodLogSummary(
+          automodRuntime.config,
+          decision,
+          message.channelId,
+        ),
         title: "Автомодерация применила действие",
       });
     } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
       await audit.publish({
-        actorId: message.author.id,
         category: "bot",
         discord: true,
         eventType: "moderation.action_failed",
-        payload: { action: decision.action, error: String(error) },
+        payload: { action: decision.action, error: reason },
         severity: "critical",
-        subjectId: message.author.id,
-        summary: "Не удалось применить действие автомодерации.",
+        subject: { id: message.author.id, kind: "user" },
+        summary: [
+          `Участник: <@${message.author.id}>`,
+          `Канал: <#${message.channelId}>`,
+          `Не удалось применить действие: ${automodActionLabel(decision.action, decision.timeoutMinutes)}.`,
+          `Причина: ${reason}`,
+        ].join("\n"),
         title: "Ошибка автомодерации",
       });
     }
@@ -392,7 +427,7 @@ export async function startGuildCore(
       return;
     }
     await audit.publish({
-      actorId: after.author.id,
+      actor: { id: after.author.id, kind: "user" },
       category: "messages",
       discord: true,
       eventType: "message.updated",
@@ -400,7 +435,11 @@ export async function startGuildCore(
         after: messagePayload(after),
         before: messagePayload(before),
       },
-      subjectId: after.id,
+      subject: {
+        channelId: after.channelId,
+        id: after.id,
+        kind: "message",
+      },
       summary: [
         `Сообщение изменено в <#${after.channelId}>.`,
         `До: ${messageExcerpt(before.content)}`,
@@ -413,12 +452,18 @@ export async function startGuildCore(
   safeOn(Events.MessageDelete, async (message) => {
     if (message.guildId !== guildId) return;
     await audit.publish({
-      ...(message.author?.id ? { actorId: message.author.id } : {}),
+      ...(message.author?.id
+        ? { actor: { id: message.author.id, kind: "user" } as const }
+        : {}),
       category: "messages",
       discord: true,
       eventType: "message.deleted",
       payload: messagePayload(message),
-      subjectId: message.id,
+      subject: {
+        channelId: message.channelId,
+        id: message.id,
+        kind: "message",
+      },
       summary: [
         `Сообщение удалено в <#${message.channelId}>.`,
         messageExcerpt(message.content),
@@ -446,7 +491,7 @@ export async function startGuildCore(
       discord: true,
       eventType: "member.banned",
       payload: { reason: ban.reason },
-      subjectId: ban.user.id,
+      subject: { id: ban.user.id, kind: "user" },
       summary: `<@${ban.user.id}> заблокирован на сервере.`,
       title: "Участник заблокирован",
     });
@@ -458,7 +503,7 @@ export async function startGuildCore(
       category: "moderation",
       discord: true,
       eventType: "member.unbanned",
-      subjectId: ban.user.id,
+      subject: { id: ban.user.id, kind: "user" },
       summary: `Блокировка <@${ban.user.id}> снята.`,
       title: "Блокировка снята",
     });
@@ -467,8 +512,11 @@ export async function startGuildCore(
   safeOn(Events.AutoModerationActionExecution, async (execution) => {
     if (execution.guild.id !== guildId) return;
     const inviteAction = automodRuntime.config.inviteLinks.action;
+    const managedInviteRule = discordAutomod.isManagedInviteRule(
+      execution.ruleId,
+    );
     if (
-      discordAutomod.isManagedInviteRule(execution.ruleId) &&
+      managedInviteRule &&
       automodRuntime.config.enabled &&
       automodRuntime.config.mode === "enforce" &&
       ["ban", "kick", "quarantine"].includes(inviteAction)
@@ -484,6 +532,7 @@ export async function startGuildCore(
       }
     }
     await audit.publish({
+      actor: { id: execution.userId, kind: "user" },
       category: "moderation",
       discord: true,
       eventType: "discord_automod.executed",
@@ -492,9 +541,28 @@ export async function startGuildCore(
         channelId: execution.channel?.id,
         ruleId: execution.ruleId,
       },
-      subjectId: execution.userId,
-      summary: `Discord AutoMod применил действие к <@${execution.userId}>.`,
-      title: "Сработал Discord AutoMod",
+      subject:
+        execution.messageId && execution.channelId
+          ? {
+              channelId: execution.channelId,
+              id: execution.messageId,
+              kind: "message",
+            }
+          : { id: execution.userId, kind: "user" },
+      summary: [
+        `Участник: <@${execution.userId}>`,
+        execution.channelId ? `Канал: <#${execution.channelId}>` : undefined,
+        `Правило: ${managedInviteRule ? "сторонние приглашения Discord" : (execution.autoModerationRule?.name ?? "Discord AutoMod")}.`,
+        `Событие: ${discordAutomodActionLabel(execution.action.type)}.`,
+        managedInviteRule
+          ? `Настройка fxvrlxss_: ${automodActionLabel(inviteAction, automodRuntime.config.inviteLinks.timeoutMinutes)}.`
+          : undefined,
+      ]
+        .filter((line): line is string => Boolean(line))
+        .join("\n"),
+      title: managedInviteRule
+        ? "Обнаружено стороннее приглашение"
+        : "Сработал Discord AutoMod",
     });
   });
 
@@ -502,7 +570,7 @@ export async function startGuildCore(
     if (after.guild.id !== guildId || before.channelId === after.channelId)
       return;
     await audit.publish({
-      actorId: after.id,
+      actor: { id: after.id, kind: "user" },
       category: "server",
       discord: false,
       eventType: "voice.channel_changed",
@@ -510,7 +578,7 @@ export async function startGuildCore(
         channelAfter: after.channelId,
         channelBefore: before.channelId,
       },
-      subjectId: after.id,
+      subject: { id: after.id, kind: "user" },
       summary: "Изменено подключение к голосовому каналу.",
       title: "Голосовой канал изменён",
     });
@@ -527,7 +595,7 @@ export async function startGuildCore(
           name: channel.name,
           type: channel.type,
         },
-        subjectId: channel.id,
+        subject: { id: channel.id, kind: "channel" },
         summary: `Создан канал \`${channel.name}\`.`,
         title: "Канал создан",
       });
@@ -545,7 +613,7 @@ export async function startGuildCore(
           name: channel.name,
           type: channel.type,
         },
-        subjectId: channel.id,
+        subject: { id: channel.id, kind: "channel" },
         summary: `Удалён канал \`${channel.name}\`.`,
         title: "Канал удалён",
       });
@@ -573,7 +641,7 @@ export async function startGuildCore(
           type: before.type,
         },
       },
-      subjectId: after.id,
+      subject: { id: after.id, kind: "channel" },
       summary: `Изменён канал \`${before.name}\` → \`${after.name}\`.`,
       title: "Канал изменён",
     });
@@ -586,7 +654,7 @@ export async function startGuildCore(
       discord: true,
       eventType: "role.created",
       payload: { permissions: role.permissions.bitfield.toString() },
-      subjectId: role.id,
+      subject: { id: role.id, kind: "role" },
       summary: `Создана роль \`${role.name}\`.`,
       title: "Роль создана",
     });
@@ -599,7 +667,7 @@ export async function startGuildCore(
       discord: true,
       eventType: "role.deleted",
       payload: { permissions: role.permissions.bitfield.toString() },
-      subjectId: role.id,
+      subject: { id: role.id, kind: "role" },
       summary: `Удалена роль \`${role.name}\`.`,
       title: "Роль удалена",
     });
@@ -627,7 +695,7 @@ export async function startGuildCore(
           position: before.position,
         },
       },
-      subjectId: after.id,
+      subject: { id: after.id, kind: "role" },
       summary: `Изменена роль \`${before.name}\` → \`${after.name}\`.`,
       title: "Роль изменена",
     });
@@ -636,7 +704,9 @@ export async function startGuildCore(
   safeOn(Events.InviteCreate, async (invite) => {
     if (invite.guild?.id !== guildId) return;
     await audit.publish({
-      ...(invite.inviter?.id ? { actorId: invite.inviter.id } : {}),
+      ...(invite.inviter?.id
+        ? { actor: { id: invite.inviter.id, kind: "user" } as const }
+        : {}),
       category: "security",
       discord: true,
       eventType: "invite.created",
@@ -647,6 +717,9 @@ export async function startGuildCore(
         maxUses: invite.maxUses,
         temporary: invite.temporary,
       },
+      ...(invite.channel?.id
+        ? { subject: { id: invite.channel.id, kind: "channel" } as const }
+        : {}),
       summary: `Создано приглашение \`${invite.code}\`.`,
       title: "Приглашение создано",
     });
@@ -659,6 +732,9 @@ export async function startGuildCore(
       discord: true,
       eventType: "invite.deleted",
       payload: { channelId: invite.channel?.id, code: invite.code },
+      ...(invite.channel?.id
+        ? { subject: { id: invite.channel.id, kind: "channel" } as const }
+        : {}),
       summary: `Удалено приглашение \`${invite.code}\`.`,
       title: "Приглашение удалено",
     });
