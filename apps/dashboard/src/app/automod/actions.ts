@@ -28,6 +28,16 @@ function numberValue(formData: FormData, name: string): number {
   return Number(formData.get(name));
 }
 
+function optionalNumberValue(
+  formData: FormData,
+  name: string,
+): number | undefined {
+  const value = formData.get(name);
+  return typeof value === "string" && value.length > 0
+    ? Number(value)
+    : undefined;
+}
+
 function idList(formData: FormData, name: string): string[] {
   const value = formData.get(name);
   if (typeof value !== "string") return [];
@@ -50,6 +60,7 @@ export async function saveAutomodDraft(
       allowVideo: enabled(formData, "allowVideo"),
       enabled: enabled(formData, "attachmentEnabled"),
       maximumPerWindow: numberValue(formData, "attachmentMaximumPerWindow"),
+      timeoutMinutes: optionalNumberValue(formData, "attachmentTimeoutMinutes"),
       windowSeconds: numberValue(formData, "attachmentWindowSeconds"),
     },
     caps: {
@@ -57,11 +68,13 @@ export async function saveAutomodDraft(
       enabled: enabled(formData, "capsEnabled"),
       minimumLetters: numberValue(formData, "capsMinimumLetters"),
       ratio: numberValue(formData, "capsRatio") / 100,
+      timeoutMinutes: optionalNumberValue(formData, "capsTimeoutMinutes"),
     },
     emojiSpam: {
       action: formData.get("emojiAction"),
       enabled: enabled(formData, "emojiEnabled"),
       maximum: numberValue(formData, "emojiMaximum"),
+      timeoutMinutes: optionalNumberValue(formData, "emojiTimeoutMinutes"),
     },
     enabled: enabled(formData, "enabled"),
     exemptChannelIds: idList(formData, "exemptChannelIds"),
@@ -70,20 +83,22 @@ export async function saveAutomodDraft(
       action: formData.get("floodAction"),
       enabled: enabled(formData, "floodEnabled"),
       maximumMessages: numberValue(formData, "floodMaximumMessages"),
+      timeoutMinutes: optionalNumberValue(formData, "floodTimeoutMinutes"),
       windowSeconds: numberValue(formData, "floodWindowSeconds"),
     },
     inviteLinks: {
       action: formData.get("inviteAction"),
       enabled: enabled(formData, "inviteEnabled"),
+      timeoutMinutes: optionalNumberValue(formData, "inviteTimeoutMinutes"),
     },
     mode: formData.get("mode"),
     repeatedMessages: {
       action: formData.get("repeatedAction"),
       enabled: enabled(formData, "repeatedEnabled"),
       maximumRepeats: numberValue(formData, "repeatedMaximumRepeats"),
+      timeoutMinutes: optionalNumberValue(formData, "repeatedTimeoutMinutes"),
       windowSeconds: numberValue(formData, "repeatedWindowSeconds"),
     },
-    timeoutMinutes: numberValue(formData, "timeoutMinutes"),
   });
   if (!parsed.success) {
     return { error: "Проверьте пороги и выбранные действия." };

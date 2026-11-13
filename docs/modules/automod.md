@@ -37,7 +37,10 @@ and appeal links.
 
 - One message receives at most one sanction: the strictest decision wins.
 - All matched rules are included in the audit event.
-- Permanent bans never result from text detection alone.
+- Every rule can observe, delete, time out, quarantine, kick, or ban. Kick and
+  ban execute immediately only in enforcement mode.
+- Timeout duration belongs to the individual rule; simultaneous timeout
+  findings use the longest configured duration.
 - New rules support observation mode before enforcement.
 - Ordinary untouched messages are archived only in PostgreSQL. Discord receives
   message edits, deletions, moderation signals, and other actionable events.
@@ -61,5 +64,5 @@ and appeal links.
 | Attachment type/rate | Bot runtime       |
 
 The global observation mode reports matches without punishment. Enforcement
-mode supports deletion, timeout, and the quarantine role. Administrator,
+mode supports deletion, timeout, quarantine, kick, and ban. Administrator,
 Manage Messages, and explicitly exempted roles/channels bypass custom checks.

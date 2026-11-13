@@ -40,7 +40,7 @@ function inviteActions(
   ];
   if (config.inviteLinks.action === "timeout") {
     actions.push({
-      metadata: { durationSeconds: config.timeoutMinutes * 60 },
+      metadata: { durationSeconds: config.inviteLinks.timeoutMinutes * 60 },
       type: AutoModerationActionType.Timeout,
     });
   }

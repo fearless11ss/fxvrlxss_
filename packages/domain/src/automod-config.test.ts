@@ -9,7 +9,7 @@ describe("automodConfigSchema", () => {
     );
   });
 
-  it("upgrades drafts created before rate and timeout fields existed", () => {
+  it("upgrades drafts created before per-rule timeouts existed", () => {
     const legacy = structuredClone(defaultAutomodConfig) as Record<
       string,
       unknown
@@ -17,12 +17,23 @@ describe("automodConfigSchema", () => {
     const attachmentPolicy = legacy.attachmentPolicy as Record<string, unknown>;
     delete attachmentPolicy.maximumPerWindow;
     delete attachmentPolicy.windowSeconds;
-    delete legacy.timeoutMinutes;
+    for (const key of [
+      "attachmentPolicy",
+      "caps",
+      "emojiSpam",
+      "flood",
+      "inviteLinks",
+      "repeatedMessages",
+    ]) {
+      delete (legacy[key] as Record<string, unknown>).timeoutMinutes;
+    }
+    legacy.timeoutMinutes = 10;
 
     const parsed = automodConfigSchema.parse(legacy);
     expect(parsed.attachmentPolicy.maximumPerWindow).toBe(4);
     expect(parsed.attachmentPolicy.windowSeconds).toBe(30);
-    expect(parsed.timeoutMinutes).toBe(10);
+    expect(parsed.flood.timeoutMinutes).toBe(10);
+    expect(parsed.inviteLinks.timeoutMinutes).toBe(10);
   });
 
   it("rejects unsafe or nonsensical thresholds", () => {
@@ -44,7 +55,7 @@ describe("automodConfigSchema", () => {
     expect(() =>
       automodConfigSchema.parse({
         ...defaultAutomodConfig,
-        timeoutMinutes: 0,
+        flood: { ...defaultAutomodConfig.flood, timeoutMinutes: 0 },
       }),
     ).toThrow();
   });

@@ -20,7 +20,9 @@ export interface AutomodDecision {
 }
 
 const actionWeight: Readonly<Record<AutomodAction, number>> = {
+  ban: 5,
   delete: 1,
+  kick: 4,
   observe: 0,
   quarantine: 3,
   timeout: 2,
@@ -69,7 +71,11 @@ function policyFrom(config: AutomodConfig): ModerationPolicy {
 function ruleFor(
   config: AutomodConfig,
   signal: CustomModerationSignal,
-): { readonly action: AutomodAction; readonly enabled: boolean } {
+): {
+  readonly action: AutomodAction;
+  readonly enabled: boolean;
+  readonly timeoutMinutes: number;
+} {
   switch (signal) {
     case "attachment-rate":
     case "attachment-type":
@@ -110,7 +116,7 @@ export class AutomodRuntime {
       return {
         action: "observe",
         findings: [],
-        timeoutMinutes: this.#config.timeoutMinutes,
+        timeoutMinutes: 10,
       };
     }
     const findings = this.#engine
@@ -118,19 +124,34 @@ export class AutomodRuntime {
       .findings.filter(
         (finding) => ruleFor(this.#config, finding.signal).enabled,
       );
-    const configuredAction = findings.reduce<AutomodAction>(
+    const configuredDecision = findings.reduce<{
+      action: AutomodAction;
+      timeoutMinutes: number;
+    }>(
       (strictest, finding) => {
-        const candidate = ruleFor(this.#config, finding.signal).action;
-        return actionWeight[candidate] > actionWeight[strictest]
-          ? candidate
-          : strictest;
+        const rule = ruleFor(this.#config, finding.signal);
+        if (actionWeight[rule.action] > actionWeight[strictest.action]) {
+          return {
+            action: rule.action,
+            timeoutMinutes: rule.timeoutMinutes,
+          };
+        }
+        if (
+          rule.action === "timeout" &&
+          strictest.action === "timeout" &&
+          rule.timeoutMinutes > strictest.timeoutMinutes
+        ) {
+          return { action: "timeout", timeoutMinutes: rule.timeoutMinutes };
+        }
+        return strictest;
       },
-      "observe",
+      { action: "observe", timeoutMinutes: 10 },
     );
     return {
-      action: this.#config.mode === "enforce" ? configuredAction : "observe",
+      action:
+        this.#config.mode === "enforce" ? configuredDecision.action : "observe",
       findings,
-      timeoutMinutes: this.#config.timeoutMinutes,
+      timeoutMinutes: configuredDecision.timeoutMinutes,
     };
   }
 }

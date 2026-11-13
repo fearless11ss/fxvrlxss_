@@ -5,11 +5,14 @@ export const moderationActionSchema = z.enum([
   "delete",
   "timeout",
   "quarantine",
+  "kick",
+  "ban",
 ]);
 
 const ruleSchema = z.object({
   action: moderationActionSchema,
   enabled: z.boolean(),
+  timeoutMinutes: z.number().int().min(1).max(40_320).default(10),
 });
 
 export const automodConfigSchema = z.object({
@@ -40,7 +43,6 @@ export const automodConfigSchema = z.object({
     maximumRepeats: z.number().int().min(2).max(10),
     windowSeconds: z.number().int().min(5).max(300),
   }),
-  timeoutMinutes: z.number().int().min(1).max(40_320).default(10),
 });
 
 export type AutomodConfig = z.infer<typeof automodConfigSchema>;
@@ -53,6 +55,7 @@ export const defaultAutomodConfig: AutomodConfig = {
     allowVideo: true,
     enabled: true,
     maximumPerWindow: 4,
+    timeoutMinutes: 10,
     windowSeconds: 30,
   },
   caps: {
@@ -60,8 +63,14 @@ export const defaultAutomodConfig: AutomodConfig = {
     enabled: true,
     minimumLetters: 12,
     ratio: 0.75,
+    timeoutMinutes: 10,
   },
-  emojiSpam: { action: "observe", enabled: true, maximum: 10 },
+  emojiSpam: {
+    action: "observe",
+    enabled: true,
+    maximum: 10,
+    timeoutMinutes: 10,
+  },
   enabled: true,
   exemptChannelIds: [],
   exemptRoleIds: [],
@@ -69,15 +78,16 @@ export const defaultAutomodConfig: AutomodConfig = {
     action: "timeout",
     enabled: true,
     maximumMessages: 6,
+    timeoutMinutes: 10,
     windowSeconds: 8,
   },
-  inviteLinks: { action: "delete", enabled: true },
+  inviteLinks: { action: "delete", enabled: true, timeoutMinutes: 10 },
   mode: "observe",
   repeatedMessages: {
     action: "timeout",
     enabled: true,
     maximumRepeats: 3,
+    timeoutMinutes: 10,
     windowSeconds: 45,
   },
-  timeoutMinutes: 10,
 };

@@ -100,7 +100,7 @@ export default async function DashboardPage() {
             <span>Последняя проверка 14:34</span>
             <form action={logoutAction}>
               <button className="quietButton" type="submit">
-                Заблокировать
+                Выйти
               </button>
             </form>
           </div>

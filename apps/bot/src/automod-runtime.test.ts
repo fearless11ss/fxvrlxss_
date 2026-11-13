@@ -25,6 +25,7 @@ describe("AutomodRuntime", () => {
         action: "timeout",
         enabled: true,
         maximumMessages: 2,
+        timeoutMinutes: 25,
         windowSeconds: 10,
       },
       mode: "enforce",
@@ -32,7 +33,6 @@ describe("AutomodRuntime", () => {
         ...defaultAutomodConfig.repeatedMessages,
         enabled: false,
       },
-      timeoutMinutes: 25,
     });
 
     expect(runtime.inspect(message("first", 1_000)).action).toBe("observe");
@@ -49,10 +49,39 @@ describe("AutomodRuntime", () => {
         action: "quarantine",
         enabled: true,
         maximumMessages: 2,
+        timeoutMinutes: 10,
         windowSeconds: 10,
       },
     });
     runtime.inspect(message("first", 1_000));
     expect(runtime.inspect(message("second", 2_000)).action).toBe("observe");
+  });
+
+  it("selects the strongest sanction and its rule-specific timeout", () => {
+    const runtime = new AutomodRuntime({
+      ...defaultAutomodConfig,
+      caps: { ...defaultAutomodConfig.caps, enabled: false },
+      emojiSpam: { ...defaultAutomodConfig.emojiSpam, enabled: false },
+      flood: {
+        ...defaultAutomodConfig.flood,
+        action: "timeout",
+        maximumMessages: 2,
+        timeoutMinutes: 15,
+        windowSeconds: 60,
+      },
+      mode: "enforce",
+      repeatedMessages: {
+        ...defaultAutomodConfig.repeatedMessages,
+        action: "timeout",
+        maximumRepeats: 2,
+        timeoutMinutes: 90,
+        windowSeconds: 60,
+      },
+    });
+
+    runtime.inspect(message("same", 1_000));
+    const decision = runtime.inspect(message("same", 2_000));
+    expect(decision.action).toBe("timeout");
+    expect(decision.timeoutMinutes).toBe(90);
   });
 });

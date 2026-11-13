@@ -58,23 +58,38 @@ function isAutomodExempt(message: Message, runtime: AutomodRuntime): boolean {
 
 async function applyCustomSanction(
   message: Message,
-  action: "delete" | "quarantine" | "timeout",
+  action: "ban" | "delete" | "kick" | "quarantine" | "timeout",
   timeoutMinutes: number,
   quarantineRoleId: string,
 ) {
   const reason = `fxvrlxss_ automod: ${action}`;
-  if (message.deletable) await message.delete();
+  if (action === "timeout" && !message.member?.moderatable) {
+    throw new Error("Matched member cannot be timed out by the bot");
+  }
+  if (action === "quarantine" && !message.member?.manageable) {
+    throw new Error("Matched member cannot be quarantined by the bot");
+  }
+  if (action === "kick" && !message.member?.kickable) {
+    throw new Error("Matched member cannot be kicked by the bot");
+  }
+  if (action === "ban" && !message.member?.bannable) {
+    throw new Error("Matched member cannot be banned by the bot");
+  }
+  if (!message.deletable) {
+    throw new Error("Matched message cannot be deleted by the bot");
+  }
+  await message.delete();
   if (action === "timeout") {
-    if (!message.member?.moderatable) {
-      throw new Error("Matched member cannot be timed out by the bot");
-    }
-    await message.member.timeout(timeoutMinutes * 60_000, reason);
+    await message.member?.timeout(timeoutMinutes * 60_000, reason);
   }
   if (action === "quarantine") {
-    if (!message.member?.manageable) {
-      throw new Error("Matched member cannot be quarantined by the bot");
-    }
-    await message.member.roles.add(quarantineRoleId, reason);
+    await message.member?.roles.add(quarantineRoleId, reason);
+  }
+  if (action === "kick") {
+    await message.member?.kick(reason);
+  }
+  if (action === "ban") {
+    await message.member?.ban({ reason });
   }
 }
 
@@ -451,17 +466,22 @@ export async function startGuildCore(
 
   safeOn(Events.AutoModerationActionExecution, async (execution) => {
     if (execution.guild.id !== guildId) return;
+    const inviteAction = automodRuntime.config.inviteLinks.action;
     if (
       discordAutomod.isManagedInviteRule(execution.ruleId) &&
       automodRuntime.config.enabled &&
       automodRuntime.config.mode === "enforce" &&
-      automodRuntime.config.inviteLinks.action === "quarantine"
+      ["ban", "kick", "quarantine"].includes(inviteAction)
     ) {
       const member = await guild.members.fetch(execution.userId);
-      await member.roles.add(
-        resources.roles.quarantine,
-        "fxvrlxss_ Discord invite automod",
-      );
+      const reason = `fxvrlxss_ Discord invite automod: ${inviteAction}`;
+      if (inviteAction === "quarantine") {
+        await member.roles.add(resources.roles.quarantine, reason);
+      } else if (inviteAction === "kick") {
+        await member.kick(reason);
+      } else if (inviteAction === "ban") {
+        await member.ban({ reason });
+      }
     }
     await audit.publish({
       category: "moderation",

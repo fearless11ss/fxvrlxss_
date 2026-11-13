@@ -881,16 +881,32 @@ textarea:focus-visible {
 }
 
 .automodForm {
-  padding-top: 38px;
+  padding: 0 0 16px;
+}
+
+.automodIntro {
+  max-width: 850px;
+  padding-bottom: 50px;
+}
+
+.automodIntro h1 {
+  max-width: 760px;
 }
 
 .automodMaster {
   display: grid;
-  grid-template-columns: 1fr minmax(240px, 0.45fr);
-  align-items: end;
-  gap: 40px;
-  padding: 0 0 32px;
+  grid-template-columns: 1fr minmax(280px, 0.65fr);
+  align-items: center;
+  gap: 48px;
+  padding: 25px 0;
+  border-top: 1px solid var(--steel-light);
   border-bottom: 1px solid var(--steel-light);
+}
+
+.automodMaster > div > p {
+  margin: 8px 0 0 28px;
+  color: var(--muted);
+  font-size: 10px;
 }
 
 .switchLine {
@@ -910,24 +926,66 @@ textarea:focus-visible {
 .ruleGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 48px;
+  border-top: 1px solid var(--steel);
   border-left: 1px solid var(--steel);
 }
 
-.ruleGrid fieldset {
-  display: grid;
+.ruleCard {
+  display: flex;
   min-width: 0;
-  gap: 17px;
-  margin: 0;
-  padding: 28px;
-  border: 0;
+  flex-direction: column;
   border-right: 1px solid var(--steel);
   border-bottom: 1px solid var(--steel);
 }
 
-.ruleGrid legend {
-  padding: 0;
+.ruleHeader {
+  display: flex;
+  min-height: 82px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 19px 28px;
+  border-bottom: 1px solid var(--steel);
+}
+
+.ruleHeader h2 {
+  margin: 0;
   font-family: var(--display);
   font-size: 27px;
+  font-weight: 500;
+  line-height: 1.05;
+}
+
+.ruleHeader .switchLine {
+  flex: 0 0 auto;
+}
+
+.ruleBody {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: 17px;
+  padding: 28px;
+}
+
+.actionFields {
+  display: grid;
+  gap: 17px;
+}
+
+.actionWarning,
+.ruleDescription {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.actionWarning {
+  padding-left: 10px;
+  border-left: 1px solid var(--wound-bright);
+  color: #c77d82;
 }
 
 .compactChecks {
@@ -967,30 +1025,55 @@ textarea:focus-visible {
   padding-inline: 24px;
 }
 
-.publishForm {
-  display: flex;
-  min-height: 72px;
+.railPublishForm {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.railPublishForm button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.mobilePublication {
+  display: none;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 28px;
-  padding: 14px 18px;
+  margin-bottom: 32px;
+  padding: 18px;
   border: 1px solid var(--steel);
   background: var(--coal);
 }
 
-.publishForm button {
+.mobilePublication > div > span,
+.mobilePublication > div > strong {
+  display: block;
+}
+
+.mobilePublication > div > span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.mobilePublication > div > strong {
+  margin-top: 5px;
+  font-family: var(--display);
+  font-size: 23px;
+  font-weight: 500;
+}
+
+.mobilePublication .railPublishForm {
+  min-width: 220px;
+  margin: 0;
+}
+
+.mobilePublication .railPublishForm button {
   min-height: 42px;
-  min-width: 180px;
   border: 1px solid var(--bone);
   background: var(--bone);
   color: var(--void);
-  font-weight: 650;
-}
-
-.publishForm button:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
 }
 
 .publicationError {
@@ -999,6 +1082,23 @@ textarea:focus-visible {
   border: 1px solid #6f4146;
   color: #d78f94;
   font-size: 12px;
+}
+
+@media (max-width: 1240px) {
+  .mobilePublication {
+    display: flex;
+  }
+}
+
+@media (max-width: 900px) {
+  .ruleGrid,
+  .exemptionGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .ruleCard {
+    border-right: 0;
+  }
 }
 
 @media (max-width: 800px) {
@@ -1036,7 +1136,7 @@ textarea:focus-visible {
 
   .moduleHeader,
   .formFooter,
-  .publishForm {
+  .mobilePublication {
     align-items: stretch;
     flex-direction: column;
   }
@@ -1055,8 +1155,7 @@ textarea:focus-visible {
     border-left: 0;
   }
 
-  .ruleGrid fieldset {
-    padding-inline: 0;
+  .ruleCard {
     border-right: 0;
   }
 }

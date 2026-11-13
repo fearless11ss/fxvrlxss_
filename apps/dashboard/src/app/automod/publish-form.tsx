@@ -15,7 +15,7 @@ export function PublishAutomodForm({
     initialState,
   );
   return (
-    <form action={action} className="publishForm">
+    <form action={action} className="railPublishForm">
       <input name="version" type="hidden" value={version} />
       <div aria-live="polite">
         {state.error ? <span className="formError">{state.error}</span> : null}
