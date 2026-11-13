@@ -945,6 +945,7 @@ textarea:focus-visible {
 
 .ruleCardWide .ruleBody {
   grid-template-columns: minmax(220px, 0.65fr) minmax(320px, 1fr);
+  align-items: start;
 }
 
 .ruleHeader {
