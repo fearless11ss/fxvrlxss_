@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { CustomModerationEngine } from "./moderation.js";
+import {
+  CustomModerationEngine,
+  defaultModerationPolicy,
+} from "./moderation.js";
 
 function message(
   id: number,
@@ -79,5 +82,23 @@ describe("CustomModerationEngine", () => {
     expect(rejected.findings.map(({ signal }) => signal)).toContain(
       "attachment-type",
     );
+  });
+
+  it("limits message length by Unicode characters", () => {
+    const engine = new CustomModerationEngine({
+      ...defaultModerationPolicy,
+      messageLength: { maxCharacters: 2 },
+    });
+
+    expect(
+      engine
+        .inspect(message(1, { content: "😀😀" }))
+        .findings.map(({ signal }) => signal),
+    ).not.toContain("message-length");
+    expect(
+      engine
+        .inspect(message(2, { content: "😀😀😀" }))
+        .findings.map(({ signal }) => signal),
+    ).toContain("message-length");
   });
 });

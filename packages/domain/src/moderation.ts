@@ -23,6 +23,7 @@ export type CustomModerationSignal =
   | "caps"
   | "emoji-spam"
   | "flood"
+  | "message-length"
   | "repeated-message";
 
 export interface ModerationFinding {
@@ -57,6 +58,9 @@ export const moderationPolicySchema = z.object({
     maxMessages: z.number().int().positive(),
     windowMs: z.number().int().positive(),
   }),
+  messageLength: z.object({
+    maxCharacters: z.number().int().positive(),
+  }),
   repeatedMessage: z.object({
     maxRepeats: z.number().int().positive(),
     windowMs: z.number().int().positive(),
@@ -84,6 +88,7 @@ export const defaultModerationPolicy = moderationPolicySchema.parse({
   caps: { minimumLetters: 12, ratio: 0.7 },
   emoji: { maxPerMessage: 12 },
   flood: { maxMessages: 5, windowMs: 5_000 },
+  messageLength: { maxCharacters: 1_500 },
   repeatedMessage: { maxRepeats: 3, windowMs: 30_000 },
 });
 
@@ -138,6 +143,21 @@ function inspectEmoji(
   const count = content.match(emojiPattern)?.length ?? 0;
   if (count <= policy.emoji.maxPerMessage) return undefined;
   return { signal: "emoji-spam", details: { count } };
+}
+
+function inspectMessageLength(
+  content: string,
+  policy: ModerationPolicy,
+): ModerationFinding | undefined {
+  const characters = [...content].length;
+  if (characters <= policy.messageLength.maxCharacters) return undefined;
+  return {
+    signal: "message-length",
+    details: {
+      characters,
+      maximum: policy.messageLength.maxCharacters,
+    },
+  };
 }
 
 function inspectAttachmentTypes(
@@ -237,6 +257,7 @@ export class CustomModerationEngine {
     const directFindings = [
       inspectCaps(message.content, this.#policy),
       inspectEmoji(message.content, this.#policy),
+      inspectMessageLength(message.content, this.#policy),
       inspectAttachmentTypes(message, this.#policy),
     ];
     for (const finding of directFindings) {

@@ -91,6 +91,15 @@ export async function saveAutomodDraft(
       enabled: enabled(formData, "inviteEnabled"),
       timeoutMinutes: optionalNumberValue(formData, "inviteTimeoutMinutes"),
     },
+    messageLength: {
+      action: formData.get("messageLengthAction"),
+      enabled: enabled(formData, "messageLengthEnabled"),
+      maximumCharacters: numberValue(formData, "messageLengthMaximum"),
+      timeoutMinutes: optionalNumberValue(
+        formData,
+        "messageLengthTimeoutMinutes",
+      ),
+    },
     mode: formData.get("mode"),
     repeatedMessages: {
       action: formData.get("repeatedAction"),

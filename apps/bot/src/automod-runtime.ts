@@ -61,6 +61,9 @@ function policyFrom(config: AutomodConfig): ModerationPolicy {
       maxMessages: config.flood.maximumMessages,
       windowMs: config.flood.windowSeconds * 1_000,
     },
+    messageLength: {
+      maxCharacters: config.messageLength.maximumCharacters,
+    },
     repeatedMessage: {
       maxRepeats: config.repeatedMessages.maximumRepeats,
       windowMs: config.repeatedMessages.windowSeconds * 1_000,
@@ -86,6 +89,8 @@ function ruleFor(
       return config.emojiSpam;
     case "flood":
       return config.flood;
+    case "message-length":
+      return config.messageLength;
     case "repeated-message":
       return config.repeatedMessages;
   }

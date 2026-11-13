@@ -347,6 +347,41 @@ export function AutomodForm({ config }: Readonly<{ config: AutomodConfig }>) {
             />
           </div>
         </section>
+
+        <section
+          className="ruleCard ruleCardWide"
+          aria-labelledby="message-length-rule-title"
+        >
+          <header className="ruleHeader">
+            <h2 id="message-length-rule-title">Длина сообщения</h2>
+            <label className="switchLine">
+              <input
+                defaultChecked={config.messageLength.enabled}
+                name="messageLengthEnabled"
+                type="checkbox"
+              />
+              <span>Включено</span>
+            </label>
+          </header>
+          <div className="ruleBody">
+            <label>
+              <span>Максимум символов</span>
+              <input
+                defaultValue={config.messageLength.maximumCharacters}
+                max="4000"
+                min="1"
+                name="messageLengthMaximum"
+                type="number"
+              />
+            </label>
+            <ActionSelect
+              name="messageLengthAction"
+              timeoutMinutes={config.messageLength.timeoutMinutes}
+              timeoutName="messageLengthTimeoutMinutes"
+              value={config.messageLength.action}
+            />
+          </div>
+        </section>
       </div>
 
       <section className="exemptionGrid">

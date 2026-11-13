@@ -28,12 +28,17 @@ describe("automodConfigSchema", () => {
       delete (legacy[key] as Record<string, unknown>).timeoutMinutes;
     }
     legacy.timeoutMinutes = 10;
+    delete legacy.messageLength;
 
     const parsed = automodConfigSchema.parse(legacy);
     expect(parsed.attachmentPolicy.maximumPerWindow).toBe(4);
     expect(parsed.attachmentPolicy.windowSeconds).toBe(30);
     expect(parsed.flood.timeoutMinutes).toBe(10);
     expect(parsed.inviteLinks.timeoutMinutes).toBe(10);
+    expect(parsed.messageLength).toMatchObject({
+      enabled: false,
+      maximumCharacters: 1_500,
+    });
   });
 
   it("rejects unsafe or nonsensical thresholds", () => {

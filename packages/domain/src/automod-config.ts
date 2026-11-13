@@ -38,6 +38,16 @@ export const automodConfigSchema = z.object({
     windowSeconds: z.number().int().min(2).max(120),
   }),
   inviteLinks: ruleSchema,
+  messageLength: ruleSchema
+    .extend({
+      maximumCharacters: z.number().int().min(1).max(4_000),
+    })
+    .default({
+      action: "delete",
+      enabled: false,
+      maximumCharacters: 1_500,
+      timeoutMinutes: 10,
+    }),
   mode: z.enum(["observe", "enforce"]),
   repeatedMessages: ruleSchema.extend({
     maximumRepeats: z.number().int().min(2).max(10),
@@ -82,6 +92,12 @@ export const defaultAutomodConfig: AutomodConfig = {
     windowSeconds: 8,
   },
   inviteLinks: { action: "delete", enabled: true, timeoutMinutes: 10 },
+  messageLength: {
+    action: "delete",
+    enabled: false,
+    maximumCharacters: 1_500,
+    timeoutMinutes: 10,
+  },
   mode: "observe",
   repeatedMessages: {
     action: "timeout",

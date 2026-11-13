@@ -939,6 +939,14 @@ textarea:focus-visible {
   border-bottom: 1px solid var(--steel);
 }
 
+.ruleCardWide {
+  grid-column: 1 / -1;
+}
+
+.ruleCardWide .ruleBody {
+  grid-template-columns: minmax(220px, 0.65fr) minmax(320px, 1fr);
+}
+
 .ruleHeader {
   display: flex;
   min-height: 82px;
@@ -1098,6 +1106,14 @@ textarea:focus-visible {
 
   .ruleCard {
     border-right: 0;
+  }
+
+  .ruleCardWide {
+    grid-column: auto;
+  }
+
+  .ruleCardWide .ruleBody {
+    grid-template-columns: 1fr;
   }
 }
 

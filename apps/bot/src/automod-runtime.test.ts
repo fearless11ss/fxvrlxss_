@@ -84,4 +84,26 @@ describe("AutomodRuntime", () => {
     expect(decision.action).toBe("timeout");
     expect(decision.timeoutMinutes).toBe(90);
   });
+
+  it("routes the message-length signal through the configured sanction", () => {
+    const runtime = new AutomodRuntime({
+      ...defaultAutomodConfig,
+      messageLength: {
+        action: "kick",
+        enabled: true,
+        maximumCharacters: 3,
+        timeoutMinutes: 10,
+      },
+      mode: "enforce",
+    });
+
+    const decision = runtime.inspect({
+      ...message("long-message", 1_000),
+      content: "длинное сообщение",
+    });
+    expect(decision.action).toBe("kick");
+    expect(decision.findings.map(({ signal }) => signal)).toContain(
+      "message-length",
+    );
+  });
 });

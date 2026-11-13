@@ -30,6 +30,7 @@ and appeal links.
 - repeated messages;
 - excessive capital letters;
 - emoji spam;
+- excessive message length;
 - attachment frequency, MIME type, and file extension;
 - join-rate raids and quarantine.
 
@@ -61,6 +62,7 @@ and appeal links.
 | Repeated messages    | Bot runtime       |
 | Capital letters      | Bot runtime       |
 | Emoji spam           | Bot runtime       |
+| Message length       | Bot runtime       |
 | Attachment type/rate | Bot runtime       |
 
 The global observation mode reports matches without punishment. Enforcement
