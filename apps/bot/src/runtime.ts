@@ -8,6 +8,7 @@ import type { ResolvedBotConfig } from "./config.js";
 import { DatabaseAutomodPublicationRepository } from "./database-automod-publication.js";
 import { DatabaseAuditWriter } from "./database-audit.js";
 import { DatabaseGuildResourceCatalogWriter } from "./database-guild-resource-catalog.js";
+import { DatabaseMessageArchiveReader } from "./database-message-archive.js";
 import { DatabaseTicketPublicationRepository } from "./database-ticket-publication.js";
 import { DatabaseTicketRepository } from "./database-ticket-repository.js";
 import { startGuildCore, type GuildCore } from "./guild-core.js";
@@ -98,6 +99,9 @@ export function createBotRuntime(config: ResolvedBotConfig): BotRuntime {
                         new DatabaseGuildResourceCatalogWriter(
                           databaseState.database,
                         ),
+                      messageArchiveReader: new DatabaseMessageArchiveReader(
+                        databaseState.database,
+                      ),
                       ticketPublicationRepository:
                         new DatabaseTicketPublicationRepository(
                           databaseState.database,

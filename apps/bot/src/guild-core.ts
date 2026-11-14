@@ -30,6 +30,7 @@ import {
   DiscordAuditWriter,
 } from "./discord-messages.js";
 import { DiscordAutomodAdapter } from "./discord-automod.js";
+import { buildDeletedMessageLog } from "./deleted-message-log.js";
 import {
   resolveGuildResources,
   type GuildResources,
@@ -38,6 +39,7 @@ import {
   collectGuildResourceCatalog,
   type GuildResourceCatalogWriter,
 } from "./guild-resource-catalog.js";
+import type { MessageArchiveReader } from "./message-archive.js";
 import { TicketModule } from "./ticket-module.js";
 import type { TicketPublicationRepository } from "./ticket-publication.js";
 import { TicketPublicationWorker } from "./ticket-publication.js";
@@ -55,6 +57,7 @@ export interface GuildCoreOptions {
   readonly guildId: string;
   readonly guildResourceCatalogWriter?: GuildResourceCatalogWriter;
   readonly logger: Logger;
+  readonly messageArchiveReader?: MessageArchiveReader;
   readonly persistentWriters?: readonly AuditWriter[];
   readonly ticketPublicationRepository?: TicketPublicationRepository;
   readonly ticketRepository?: TicketRepository;
@@ -503,23 +506,31 @@ export async function startGuildCore(
 
   safeOn(Events.MessageDelete, async (message) => {
     if (message.guildId !== guildId) return;
+    const livePayload = messagePayload(message);
+    const archived = await options.messageArchiveReader?.findLatest(
+      guildId,
+      message.id,
+    );
+    const log = buildDeletedMessageLog(
+      {
+        attachments: livePayload.attachments,
+        ...(message.author?.id ? { authorId: message.author.id } : {}),
+        channelId: message.channelId,
+        content: message.content,
+        messageId: message.id,
+      },
+      archived ?? null,
+    );
     await audit.publish({
-      ...(message.author?.id
-        ? { actor: { id: message.author.id, kind: "user" } as const }
+      ...(log.actorId
+        ? { actor: { id: log.actorId, kind: "user" } as const }
         : {}),
       category: "messages",
       discord: true,
       eventType: "message.deleted",
-      payload: messagePayload(message),
-      subject: {
-        channelId: message.channelId,
-        id: message.id,
-        kind: "message",
-      },
-      summary: [
-        `Сообщение удалено в <#${message.channelId}>.`,
-        messageExcerpt(message.content),
-      ].join("\n"),
+      payload: log.payload,
+      subject: log.subject,
+      summary: log.summary,
       title: "Сообщение удалено",
     });
   });

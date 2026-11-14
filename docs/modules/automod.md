@@ -45,6 +45,9 @@ and appeal links.
 - New rules support observation mode before enforcement.
 - Ordinary untouched messages are archived only in PostgreSQL. Discord receives
   message edits, deletions, moderation signals, and other actionable events.
+- Deleted-message logs reference the surviving channel rather than a dead
+  message URL. When Discord emits an uncached partial message, the bot restores
+  its latest text, author, and attachment metadata from the PostgreSQL archive.
 - Dashboard edits create immutable versioned drafts; publishing remains disabled
   until the owner explicitly submits a draft.
 - Publication moves a draft to `queued`; only the bot, which owns the Discord
