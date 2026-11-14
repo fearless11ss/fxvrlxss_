@@ -24,6 +24,7 @@ GitHub. Use standard relative Markdown links so every route works in both.
 - [Discord server structure](discord/server-structure.md)
 - [Automoderation](modules/automod.md)
 - [Tickets](modules/tickets.md)
+- [Temporary voice rooms](modules/voice-rooms.md)
 - [Design system](design/design-system.md)
 
 ## Operations

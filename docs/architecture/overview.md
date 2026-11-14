@@ -33,6 +33,7 @@ flowchart LR
 | Audit dispatch            | Publish one ordered event     | Discord routing, persistence, failure isolation |
 | Guild resource catalog    | Replace one guild snapshot    | Discord names, categories, ordering, stale rows |
 | Ticket workflow           | Advance one ticket lifecycle  | Discord channels, permissions, transcripts      |
+| Temporary voice rooms     | Handle voice state or control | Creation, ownership, access, cleanup, recovery  |
 | Discord adapter           | Apply desired state           | Rate limits, hierarchy, retries, audit reasons  |
 
 The pure domain package contains policy and desired state. Discord and
@@ -54,3 +55,4 @@ PostgreSQL are adapters at explicit seams, not dependencies of the policy.
 - [Discord structure](../discord/server-structure.md)
 - [Automoderation](../modules/automod.md)
 - [Tickets](../modules/tickets.md)
+- [Temporary voice rooms](../modules/voice-rooms.md)

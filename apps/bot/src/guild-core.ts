@@ -44,6 +44,10 @@ import { TicketModule } from "./ticket-module.js";
 import type { TicketPublicationRepository } from "./ticket-publication.js";
 import { TicketPublicationWorker } from "./ticket-publication.js";
 import type { TicketRepository } from "./ticket-repository.js";
+import { VoiceRoomModule } from "./voice-room-module.js";
+import type { VoicePublicationRepository } from "./voice-publication.js";
+import { VoicePublicationWorker } from "./voice-publication.js";
+import type { VoiceRoomRepository } from "./voice-room-repository.js";
 
 export interface GuildCore {
   readonly audit: AuditBus;
@@ -61,6 +65,8 @@ export interface GuildCoreOptions {
   readonly persistentWriters?: readonly AuditWriter[];
   readonly ticketPublicationRepository?: TicketPublicationRepository;
   readonly ticketRepository?: TicketRepository;
+  readonly voicePublicationRepository?: VoicePublicationRepository;
+  readonly voiceRoomRepository?: VoiceRoomRepository;
 }
 
 function isAutomodExempt(message: Message, runtime: AutomodRuntime): boolean {
@@ -271,12 +277,31 @@ export async function startGuildCore(
           repository: options.ticketPublicationRepository,
         })
       : undefined;
+  const voiceModule = options.voiceRoomRepository
+    ? new VoiceRoomModule({
+        audit,
+        guild,
+        logger,
+        repository: options.voiceRoomRepository,
+        resources,
+      })
+    : undefined;
+  const voicePublicationWorker =
+    voiceModule && options.voicePublicationRepository
+      ? new VoicePublicationWorker({
+          applier: voiceModule,
+          logger,
+          repository: options.voicePublicationRepository,
+        })
+      : undefined;
   const startedAt = new Date();
 
   await registerStatusCommand(guild);
   await publicationWorker?.start();
   await ticketModule?.start();
   await ticketPublicationWorker?.start();
+  await voiceModule?.start();
+  await voicePublicationWorker?.start();
 
   safeOn(Events.GuildMemberAdd, async (member) => {
     if (member.guild.id !== guildId || member.user.bot) return;
@@ -632,6 +657,7 @@ export async function startGuildCore(
   safeOn(Events.VoiceStateUpdate, async (before, after) => {
     if (after.guild.id !== guildId || before.channelId === after.channelId)
       return;
+    await voiceModule?.handleVoiceState(before, after);
     await audit.publish({
       actor: { id: after.id, kind: "user" },
       category: "server",
@@ -668,6 +694,7 @@ export async function startGuildCore(
 
   safeOn(Events.ChannelDelete, async (channel) => {
     if (!channel.isDMBased() && channel.guild.id === guildId) {
+      await voiceModule?.handleChannelDelete(channel.id);
       await refreshGuildResourceCatalog();
       await audit.publish({
         category: "server",
@@ -825,6 +852,7 @@ export async function startGuildCore(
   safeOn(Events.InteractionCreate, async (interaction) => {
     if (interaction.guildId !== guildId) return;
     if (await ticketModule?.handleInteraction(interaction)) return;
+    if (await voiceModule?.handleInteraction(interaction)) return;
     const isStatusCommand =
       interaction.isChatInputCommand() && interaction.commandName === "статус";
     const isStatusRefresh =
@@ -871,7 +899,9 @@ export async function startGuildCore(
   return {
     audit,
     async stop() {
+      await voicePublicationWorker?.stop();
       await ticketPublicationWorker?.stop();
+      await voiceModule?.stop();
       await ticketModule?.stop();
       await publicationWorker?.stop();
       await eventGate.close();

@@ -19,6 +19,10 @@
     "./ticket-config": {
       "types": "./src/ticket-config.ts",
       "import": "./dist/ticket-config.js"
+    },
+    "./voice-config": {
+      "types": "./src/voice-config.ts",
+      "import": "./dist/voice-config.js"
     }
   },
   "scripts": {

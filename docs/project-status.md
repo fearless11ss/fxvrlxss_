@@ -38,7 +38,7 @@ updated: 2026-11-14
 - [ ] Moderation sanctions, points, evidence, and appeals
 - [x] Split Discord log routing and full database event journal foundation
 - [x] Versioned ticket panel, private channels, staff workflow, and transcripts
-- [ ] Temporary voice-room lifecycle
+- [x] Temporary voice-room lifecycle, owner controls, recovery, and dashboard configuration
 - [x] Additive staging guild blueprint reconciliation and dry-run
 - [ ] Destructive production cleanup dry-run
 

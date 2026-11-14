@@ -69,3 +69,10 @@ in [the ticket module](../modules/tickets.md).
 New members see only `прихожая`, `правила`, and `навигация`. After Discord rule
 screening and the Components V2 confirmation, the bot grants `Участник` or
 places a risky account in `Карантин`.
+
+## Voice flow
+
+`создать-комнату` is the only permanent voice channel. Temporary rooms are
+created directly below it in `ГОЛОСОВЫЕ` and are removed as soon as no human
+members remain. Their lifecycle is documented in
+[the temporary voice room module](../modules/voice-rooms.md).

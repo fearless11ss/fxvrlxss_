@@ -33,6 +33,8 @@ assets/         User-provided visual references
   [automoderation module](../modules/automod.md).
 - Ticket ownership and lifecycle are defined by the
   [ticket module](../modules/tickets.md).
+- Temporary room ownership and cleanup are defined by the
+  [voice room module](../modules/voice-rooms.md).
 - Deployment decisions live in [deployment](../operations/deployment.md).
 
 > [!WARNING]

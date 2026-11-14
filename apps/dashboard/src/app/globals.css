@@ -729,7 +729,8 @@ textarea:focus-visible {
 
 .loginForm label,
 .automodForm label,
-.ticketForm label {
+.ticketForm label,
+.voiceForm label {
   display: grid;
   gap: 8px;
   color: var(--ash);
@@ -742,7 +743,9 @@ textarea:focus-visible {
 .automodForm textarea,
 .ticketForm input,
 .ticketForm select,
-.ticketForm textarea {
+.ticketForm textarea,
+.voiceForm input,
+.voiceForm textarea {
   min-height: 44px;
   padding: 10px 12px;
 }
@@ -1318,6 +1321,112 @@ textarea:focus-visible {
   margin-top: 42px;
 }
 
+.voiceForm {
+  padding-bottom: 16px;
+}
+
+.voiceMaster {
+  display: grid;
+  grid-template-columns: 1fr minmax(220px, 0.45fr);
+  align-items: center;
+  gap: 48px;
+  padding: 25px 0;
+  border-top: 1px solid var(--steel-light);
+  border-bottom: 1px solid var(--steel-light);
+}
+
+.voiceMaster > div > p {
+  margin: 8px 0 0 28px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.voiceMaster small,
+.voiceSettingsGrid small,
+.voiceControlRow small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.voiceSettings,
+.voiceControls {
+  padding-top: 54px;
+}
+
+.voiceSettings .sectionHeader,
+.voiceControls .sectionHeader {
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--steel);
+}
+
+.voiceSettings .sectionHeader h2,
+.voiceControls .sectionHeader h2 {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.voiceSettingsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px 32px;
+  padding: 30px 0 38px;
+}
+
+.voiceWideField {
+  grid-column: 1 / -1;
+}
+
+.voiceControlLedger {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-left: 1px solid var(--steel);
+}
+
+.voiceControlRow {
+  display: grid !important;
+  min-height: 88px;
+  grid-template-columns: 34px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 16px !important;
+  padding: 18px 22px;
+  border-right: 1px solid var(--steel);
+  border-bottom: 1px solid var(--steel);
+  cursor: pointer;
+}
+
+.voiceControlIndex {
+  color: var(--muted);
+  font-family: var(--display);
+  font-size: 18px;
+}
+
+.voiceControlRow strong,
+.voiceControlRow small {
+  display: block;
+}
+
+.voiceControlRow strong {
+  color: var(--bone);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.voiceControlRow small {
+  margin-top: 5px;
+  line-height: 1.5;
+}
+
+.voiceControlRow input {
+  width: 17px;
+  min-height: 17px;
+  margin: 0;
+  accent-color: var(--bone);
+}
+
+.voiceForm .formFooter {
+  margin-top: 42px;
+}
+
 @media (max-width: 1240px) {
   .mobilePublication {
     display: flex;
@@ -1328,11 +1437,17 @@ textarea:focus-visible {
   .ruleGrid,
   .exemptionGrid,
   .ticketSettingsGrid,
-  .ticketTypeGrid {
+  .ticketTypeGrid,
+  .voiceSettingsGrid,
+  .voiceControlLedger {
     grid-template-columns: 1fr;
   }
 
   .ticketWideField {
+    grid-column: auto;
+  }
+
+  .voiceWideField {
     grid-column: auto;
   }
 
@@ -1402,6 +1517,7 @@ textarea:focus-visible {
   }
 
   .automodMaster,
+  .voiceMaster,
   .ruleGrid,
   .exemptionGrid {
     grid-template-columns: 1fr;

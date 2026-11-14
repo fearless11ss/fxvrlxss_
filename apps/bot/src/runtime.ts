@@ -11,6 +11,8 @@ import { DatabaseGuildResourceCatalogWriter } from "./database-guild-resource-ca
 import { DatabaseMessageArchiveReader } from "./database-message-archive.js";
 import { DatabaseTicketPublicationRepository } from "./database-ticket-publication.js";
 import { DatabaseTicketRepository } from "./database-ticket-repository.js";
+import { DatabaseVoicePublicationRepository } from "./database-voice-publication.js";
+import { DatabaseVoiceRoomRepository } from "./database-voice-room-repository.js";
 import { startGuildCore, type GuildCore } from "./guild-core.js";
 
 export interface BotRuntime {
@@ -108,6 +110,14 @@ export function createBotRuntime(config: ResolvedBotConfig): BotRuntime {
                           config.DISCORD_GUILD_ID,
                         ),
                       ticketRepository: new DatabaseTicketRepository(
+                        databaseState.database,
+                      ),
+                      voicePublicationRepository:
+                        new DatabaseVoicePublicationRepository(
+                          databaseState.database,
+                          config.DISCORD_GUILD_ID,
+                        ),
+                      voiceRoomRepository: new DatabaseVoiceRoomRepository(
                         databaseState.database,
                       ),
                     }

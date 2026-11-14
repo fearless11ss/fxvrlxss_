@@ -3,6 +3,9 @@ import { ChannelType, type Guild } from "discord.js";
 export interface GuildResources {
   readonly channels: {
     readonly entry: string;
+    readonly general: {
+      readonly botCommands: string;
+    };
     readonly logs: Readonly<
       Record<"security" | "moderation" | "messages" | "server" | "bot", string>
     >;
@@ -12,6 +15,10 @@ export interface GuildResources {
     };
     readonly team: {
       readonly ticketDiscussions: string;
+    };
+    readonly voice: {
+      readonly category: string;
+      readonly createRoom: string;
     };
   };
   readonly roles: {
@@ -57,6 +64,33 @@ function requireTextChannel(
   return channel.id;
 }
 
+function requireVoiceChannel(
+  guild: Guild,
+  name: string,
+  parentName: string,
+): string {
+  const parent = guild.channels.cache.find(
+    (candidate) =>
+      candidate.type === ChannelType.GuildCategory &&
+      candidate.name === parentName,
+  );
+  if (!parent) {
+    throw new Error(`Required Discord category is missing: ${parentName}`);
+  }
+  const channel = guild.channels.cache.find(
+    (candidate) =>
+      candidate.type === ChannelType.GuildVoice &&
+      candidate.name === name &&
+      candidate.parentId === parent.id,
+  );
+  if (!channel) {
+    throw new Error(
+      `Required Discord voice channel is missing: ${parentName}/${name}`,
+    );
+  }
+  return channel.id;
+}
+
 function requireCategory(guild: Guild, name: string): string {
   const category = guild.channels.cache.find(
     (candidate) =>
@@ -74,6 +108,9 @@ export async function resolveGuildResources(
   return {
     channels: {
       entry: requireTextChannel(guild, "прихожая"),
+      general: {
+        botCommands: requireTextChannel(guild, "команды-бота", "ОБЩЕНИЕ"),
+      },
       logs: {
         security: requireTextChannel(guild, "безопасность", "ЛОГИ"),
         moderation: requireTextChannel(guild, "модерация", "ЛОГИ"),
@@ -91,6 +128,10 @@ export async function resolveGuildResources(
           "обсуждение-обращений",
           "КОМАНДА",
         ),
+      },
+      voice: {
+        category: requireCategory(guild, "ГОЛОСОВЫЕ"),
+        createRoom: requireVoiceChannel(guild, "создать-комнату", "ГОЛОСОВЫЕ"),
       },
     },
     roles: {
