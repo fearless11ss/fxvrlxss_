@@ -11,6 +11,7 @@ import {
   ContainerBuilder,
   LabelBuilder,
   MessageFlags,
+  MessageType,
   ModalBuilder,
   PermissionFlagsBits,
   TextDisplayBuilder,
@@ -34,28 +35,9 @@ import type {
   VoiceRoomRepository,
 } from "./voice-room-repository.js";
 
-const PANEL_ID = "voice:panel";
+const LEGACY_PANEL_ID = "voice:panel";
 const RENAME_MODAL_ID = "voice:rename:submit";
 const LIMIT_MODAL_ID = "voice:limit:submit";
-
-export function buildVoiceEntryPanel(config: VoiceConfig): ContainerBuilder[] {
-  const button = new ButtonBuilder()
-    .setCustomId(PANEL_ID)
-    .setLabel("Управлять комнатой")
-    .setStyle(ButtonStyle.Secondary);
-  return [
-    new ContainerBuilder()
-      .setAccentColor(0xf2f2ef)
-      .addTextDisplayComponents(
-        new TextDisplayBuilder().setContent(
-          `## ${escapeMarkdown(config.panelTitle)}\n${escapeMarkdown(config.panelDescription)}`,
-        ),
-      )
-      .addActionRowComponents(
-        new ActionRowBuilder<ButtonBuilder>().addComponents(button),
-      ),
-  ];
-}
 
 export function buildVoiceRoomControls(
   room: VoiceRoomRecord,
@@ -127,7 +109,13 @@ export function buildVoiceRoomControls(
     .setAccentColor(0xf2f2ef)
     .addTextDisplayComponents(
       new TextDisplayBuilder().setContent(
-        `## ${escapeMarkdown(channelName)}\n<#${room.channelId}> · ${state}`,
+        [
+          `## ${escapeMarkdown(config.panelTitle)}`,
+          `**${escapeMarkdown(channelName)}** · <#${room.channelId}>`,
+          `Владелец: <@${room.ownerId}>`,
+          escapeMarkdown(config.panelDescription),
+          `Состояние: ${state}`,
+        ].join("\n"),
       ),
     );
   if (primary.components.length > 0) container.addActionRowComponents(primary);
@@ -197,13 +185,12 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
   }
 
   async start(): Promise<void> {
-    await this.#ensurePanel();
+    await this.#removeLegacyPanel();
     await this.#reconcileRooms();
   }
 
   async apply(config: VoiceConfig): Promise<void> {
     this.#config = voiceConfigSchema.parse(config);
-    await this.#ensurePanel();
     await this.#reconcileRooms();
   }
 
@@ -234,6 +221,17 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
     if (room) await this.#repository.remove(channelId);
   }
 
+  async handleMessageDelete(
+    channelId: string,
+    messageId: string,
+  ): Promise<void> {
+    const room = await this.#repository.findByChannel(channelId);
+    if (!room || room.controlMessageId !== messageId) return;
+    const channel = this.#guild.channels.cache.get(channelId);
+    if (!channel || channel.type !== ChannelType.GuildVoice) return;
+    await this.#ensureRoomControl(room, channel);
+  }
+
   async handleInteraction(interaction: Interaction): Promise<boolean> {
     if (interaction.guildId !== this.#guild.id) return false;
     const customId =
@@ -242,23 +240,29 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
         : "";
     if (!customId.startsWith("voice:")) return false;
 
-    if (interaction.isButton() && customId === PANEL_ID) {
-      await this.#replyWithOwnedRoom(interaction);
-      return true;
-    }
-
-    const owned = await this.#ownedRoom(interaction.user.id);
-    if (!owned) {
+    const room = interaction.channelId
+      ? await this.#repository.findByChannel(interaction.channelId)
+      : null;
+    if (!room || room.ownerId !== interaction.user.id) {
       if (interaction.isRepliable()) {
         await interaction.reply({
-          content:
-            "У вас нет временной комнаты. Зайдите в канал «создать-комнату».",
+          content: "Управлять этой комнатой может только её текущий владелец.",
           flags: MessageFlags.Ephemeral,
         });
       }
       return true;
     }
-    const { channel, room } = owned;
+    const channel = this.#guild.channels.cache.get(room.channelId);
+    if (!channel || channel.type !== ChannelType.GuildVoice) {
+      await this.#repository.remove(room.channelId);
+      if (interaction.isRepliable()) {
+        await interaction.reply({
+          content: "Комната больше не существует.",
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+      return true;
+    }
 
     if (interaction.isButton() && customId === "voice:rename:open") {
       if (!this.#config.controls.allowRename) return true;
@@ -433,6 +437,7 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
         });
         if (!updated) throw new Error("Temporary voice room disappeared");
         await this.#applyAccess(updated, channel);
+        await this.#ensureRoomControl(updated, channel);
         await interaction.update({
           components: [
             new ContainerBuilder()
@@ -490,31 +495,6 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
     return true;
   }
 
-  async #replyWithOwnedRoom(
-    interaction: Extract<Interaction, { reply: unknown }>,
-  ): Promise<void> {
-    const owned = await this.#ownedRoom(interaction.user.id);
-    if (!owned || !interaction.isRepliable()) {
-      if (interaction.isRepliable()) {
-        await interaction.reply({
-          content:
-            "У вас нет временной комнаты. Зайдите в канал «создать-комнату».",
-          flags: MessageFlags.Ephemeral,
-        });
-      }
-      return;
-    }
-    await interaction.reply({
-      allowedMentions: { parse: [] },
-      components: buildVoiceRoomControls(
-        owned.room,
-        this.#config,
-        owned.channel.name,
-      ),
-      flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
-    });
-  }
-
   async #ownedRoom(
     ownerId: string,
   ): Promise<{ channel: VoiceChannel; room: VoiceRoomRecord } | null> {
@@ -555,12 +535,14 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
     try {
       created = await this.#repository.create({
         channelId: channel.id,
+        controlMessageId: null,
         guildId: this.#guild.id,
         hidden: false,
         locked: false,
         ownerId: member.id,
         userLimit: this.#config.defaultUserLimit,
       });
+      created = await this.#ensureRoomControl(created, channel);
       await member.voice.setChannel(
         channel,
         "fxvrlxss_ temporary room created",
@@ -628,6 +610,7 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
     });
     if (!updated) return;
     await this.#applyAccess(updated, channel);
+    await this.#ensureRoomControl(updated, channel);
     await this.#audit.publish({
       actor: { id: departedUserId, kind: "user" },
       category: "bot",
@@ -658,37 +641,76 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
     });
   }
 
-  async #ensurePanel(): Promise<void> {
-    const channel = this.#guild.channels.cache.get(
-      this.#resources.channels.general.botCommands,
+  async #removeLegacyPanel(): Promise<void> {
+    const general = this.#guild.channels.cache.find(
+      (channel) =>
+        channel.type === ChannelType.GuildCategory &&
+        channel.name === "ОБЩЕНИЕ",
     );
-    if (!channel || channel.type !== ChannelType.GuildText) {
-      throw new Error("Bot commands text channel is unavailable");
+    const channel = this.#guild.channels.cache.find(
+      (candidate) =>
+        candidate.type === ChannelType.GuildText &&
+        candidate.name === "команды-бота" &&
+        candidate.parentId === general?.id,
+    );
+    if (!channel || channel.type !== ChannelType.GuildText) return;
+    const [recent, pins] = await Promise.all([
+      channel.messages.fetch({ limit: 100 }),
+      channel.messages.fetchPins({ limit: 50 }),
+    ]);
+    const messages = new Map(
+      [...recent.values(), ...pins.items.map(({ message }) => message)].map(
+        (message) => [message.id, message],
+      ),
+    );
+    const panelIds = new Set(
+      [...messages.values()]
+        .filter(
+          (message) =>
+            message.author.id === this.#guild.client.user.id &&
+            JSON.stringify(
+              message.components.map((item) => item.toJSON()),
+            ).includes(LEGACY_PANEL_ID),
+        )
+        .map((message) => message.id),
+    );
+    for (const message of messages.values()) {
+      if (
+        panelIds.has(message.id) ||
+        (message.type === MessageType.ChannelPinnedMessage &&
+          message.reference?.messageId &&
+          panelIds.has(message.reference.messageId))
+      ) {
+        await message.delete().catch(() => undefined);
+      }
     }
-    const pins = await channel.messages.fetchPins({ limit: 50 });
-    const existing = pins.items
-      .map(({ message }) => message)
-      .find(
-        (message) =>
-          message.author.id === this.#guild.client.user.id &&
-          JSON.stringify(
-            message.components.map((item) => item.toJSON()),
-          ).includes(PANEL_ID),
-      );
+  }
+
+  async #ensureRoomControl(
+    room: VoiceRoomRecord,
+    channel: VoiceChannel,
+  ): Promise<VoiceRoomRecord> {
+    const existing = room.controlMessageId
+      ? await channel.messages.fetch(room.controlMessageId).catch(() => null)
+      : null;
     if (existing) {
       await existing.edit({
         allowedMentions: { parse: [] },
-        components: buildVoiceEntryPanel(this.#config),
+        components: buildVoiceRoomControls(room, this.#config, channel.name),
         flags: MessageFlags.IsComponentsV2,
       });
-      return;
+      return room;
     }
-    const panel = await channel.send({
+    const control = await channel.send({
       allowedMentions: { parse: [] },
-      components: buildVoiceEntryPanel(this.#config),
+      components: buildVoiceRoomControls(room, this.#config, channel.name),
       flags: MessageFlags.IsComponentsV2,
     });
-    await panel.pin("fxvrlxss_ temporary voice control panel");
+    const updated = await this.#repository.update(room.channelId, {
+      controlMessageId: control.id,
+    });
+    if (!updated) throw new Error("Temporary voice room disappeared");
+    return updated;
   }
 
   async #reconcileRooms(): Promise<void> {
@@ -711,6 +733,7 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
         }
         await channel.setUserLimit(room.userLimit);
         await this.#applyAccess(room, channel);
+        await this.#ensureRoomControl(room, channel);
       } catch (error) {
         this.#logger.error(
           { channelId: room.channelId, error },

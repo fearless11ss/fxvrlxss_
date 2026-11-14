@@ -64,7 +64,7 @@ export function VoiceForm({ config }: Readonly<{ config: VoiceConfig }>) {
         </header>
         <div className="voiceSettingsGrid">
           <label>
-            <span>Заголовок панели в Discord</span>
+            <span>Заголовок пульта в комнате</span>
             <input
               defaultValue={config.panelTitle}
               maxLength={80}
@@ -83,7 +83,7 @@ export function VoiceForm({ config }: Readonly<{ config: VoiceConfig }>) {
             <small>{"{name} — отображаемое имя владельца."}</small>
           </label>
           <label className="voiceWideField">
-            <span>Описание панели</span>
+            <span>Описание пульта</span>
             <textarea
               defaultValue={config.panelDescription}
               maxLength={500}

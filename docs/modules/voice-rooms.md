@@ -21,8 +21,8 @@ children; it is not a separate channel or nested category.
    PostgreSQL, and moves the member into it.
 3. If the member already owns a room, the bot moves them back to that room
    instead of creating a duplicate.
-4. The owner opens the pinned Components V2 panel in `команды-бота`. The
-   resulting control panel is ephemeral and only operates on their room.
+4. The bot posts a persistent Components V2 control panel in the text chat of
+   the new voice channel. Only the current owner can use its actions.
 5. When the owner leaves an occupied room, ownership passes to a remaining
    human member who does not already own another room.
 6. When no human members remain, the Discord channel and its active database
@@ -47,15 +47,16 @@ Administrators continue to follow Discord's native permission rules.
 
 - PostgreSQL is the source of truth for owner, lock, visibility, and user
   limit.
-- Startup reconciliation reapplies stored state, deletes empty managed rooms,
-  and removes records for missing managed channels.
+- Startup reconciliation reapplies stored state, restores or updates the
+  in-room control message, deletes empty managed rooms, and removes records for
+  missing managed channels.
 - The bot only reconciles channels already registered in
   `temporary_voice_rooms`; unrelated voice channels are never adopted or
   deleted.
 - Disabling the module prevents new room creation without destroying occupied
   rooms.
 - Configuration changes use immutable drafts and are acknowledged as published
-  only after the bot updates the pinned Discord panel.
+  only after the bot updates every active in-room control panel.
 
 See [the server structure](../discord/server-structure.md) and
 [the architecture overview](../architecture/overview.md).

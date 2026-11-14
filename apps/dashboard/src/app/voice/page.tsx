@@ -151,7 +151,7 @@ export default async function VoicePage() {
         <section className="riskPanel publicationPanel">
           <p className="sectionPath">Управление версией</p>
           <strong>Передать боту</strong>
-          <p>Публикация обновит закреплённый пульт в канале «команды-бота».</p>
+          <p>Публикация обновит пульты во всех активных комнатах.</p>
           <PublishVoiceForm
             disabled={snapshot.status !== "draft"}
             version={snapshot.version}

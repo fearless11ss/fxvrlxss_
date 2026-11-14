@@ -10,6 +10,7 @@ import type {
 function record(row: typeof temporaryVoiceRooms.$inferSelect): VoiceRoomRecord {
   return {
     channelId: row.channelId,
+    controlMessageId: row.controlMessageId,
     guildId: row.guildId,
     hidden: row.hidden,
     locked: row.locked,
@@ -78,7 +79,10 @@ export class DatabaseVoiceRoomRepository implements VoiceRoomRepository {
   async update(
     channelId: string,
     patch: Partial<
-      Pick<VoiceRoomRecord, "hidden" | "locked" | "ownerId" | "userLimit">
+      Pick<
+        VoiceRoomRecord,
+        "controlMessageId" | "hidden" | "locked" | "ownerId" | "userLimit"
+      >
     >,
   ): Promise<VoiceRoomRecord | null> {
     const [updated] = await this.#database

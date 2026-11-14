@@ -3,9 +3,6 @@ import { ChannelType, type Guild } from "discord.js";
 export interface GuildResources {
   readonly channels: {
     readonly entry: string;
-    readonly general: {
-      readonly botCommands: string;
-    };
     readonly logs: Readonly<
       Record<"security" | "moderation" | "messages" | "server" | "bot", string>
     >;
@@ -108,9 +105,6 @@ export async function resolveGuildResources(
   return {
     channels: {
       entry: requireTextChannel(guild, "прихожая"),
-      general: {
-        botCommands: requireTextChannel(guild, "команды-бота", "ОБЩЕНИЕ"),
-      },
       logs: {
         security: requireTextChannel(guild, "безопасность", "ЛОГИ"),
         moderation: requireTextChannel(guild, "модерация", "ЛОГИ"),

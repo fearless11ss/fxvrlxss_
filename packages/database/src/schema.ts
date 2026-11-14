@@ -170,6 +170,7 @@ export const temporaryVoiceRooms = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     guildId: text("guild_id").notNull(),
     channelId: text("channel_id").notNull(),
+    controlMessageId: text("control_message_id"),
     ownerId: text("owner_id").notNull(),
     locked: boolean("locked").default(false).notNull(),
     hidden: boolean("hidden").default(false).notNull(),

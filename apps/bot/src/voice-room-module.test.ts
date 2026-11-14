@@ -1,15 +1,12 @@
-import { ComponentType } from "discord.js";
 import { describe, expect, it } from "vitest";
 
 import { defaultVoiceConfig } from "@fxvrlxss/domain/voice-config";
-import {
-  buildVoiceEntryPanel,
-  buildVoiceRoomControls,
-} from "./voice-room-module.js";
+import { buildVoiceRoomControls } from "./voice-room-module.js";
 import type { VoiceRoomRecord } from "./voice-room-repository.js";
 
 const room: VoiceRoomRecord = {
   channelId: "voice-1",
+  controlMessageId: "control-1",
   guildId: "guild-1",
   hidden: false,
   locked: false,
@@ -18,16 +15,7 @@ const room: VoiceRoomRecord = {
 };
 
 describe("temporary voice Components V2", () => {
-  it("builds the persistent entry panel", () => {
-    const panel = buildVoiceEntryPanel(defaultVoiceConfig)[0]?.toJSON();
-    const serialized = JSON.stringify(panel);
-
-    expect(panel?.type).toBe(ComponentType.Container);
-    expect(serialized).toContain("voice:panel");
-    expect(serialized).toContain("Временные голосовые комнаты");
-  });
-
-  it("shows every enabled owner action", () => {
+  it("builds an in-room panel with every enabled owner action", () => {
     const controls = buildVoiceRoomControls(
       room,
       defaultVoiceConfig,
@@ -35,6 +23,8 @@ describe("temporary voice Components V2", () => {
     )[0]?.toJSON();
     const serialized = JSON.stringify(controls);
 
+    expect(serialized).toContain("Временные голосовые комнаты");
+    expect(serialized).toContain("<@owner-1>");
     expect(serialized).toContain("voice:rename:open");
     expect(serialized).toContain("voice:limit:open");
     expect(serialized).toContain("voice:lock");

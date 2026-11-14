@@ -531,6 +531,7 @@ export async function startGuildCore(
 
   safeOn(Events.MessageDelete, async (message) => {
     if (message.guildId !== guildId) return;
+    await voiceModule?.handleMessageDelete(message.channelId, message.id);
     const livePayload = messagePayload(message);
     const archived = await options.messageArchiveReader?.findLatest(
       guildId,

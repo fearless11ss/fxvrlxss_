@@ -37,7 +37,7 @@ export const defaultVoiceConfig: VoiceConfig = {
   defaultUserLimit: 0,
   enabled: true,
   panelDescription:
-    "Зайдите в «создать-комнату», затем откройте здесь приватный пульт управления своей комнатой.",
+    "Пульт доступен владельцу прямо в текстовом чате этой голосовой комнаты.",
   panelTitle: "Временные голосовые комнаты",
   roomNameTemplate: "Комната {name}",
 };

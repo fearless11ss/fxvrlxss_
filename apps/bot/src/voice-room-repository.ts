@@ -1,5 +1,6 @@
 export interface VoiceRoomRecord {
   readonly channelId: string;
+  readonly controlMessageId: string | null;
   readonly guildId: string;
   readonly hidden: boolean;
   readonly locked: boolean;
@@ -19,7 +20,10 @@ export interface VoiceRoomRepository {
   update(
     channelId: string,
     patch: Partial<
-      Pick<VoiceRoomRecord, "hidden" | "locked" | "ownerId" | "userLimit">
+      Pick<
+        VoiceRoomRecord,
+        "controlMessageId" | "hidden" | "locked" | "ownerId" | "userLimit"
+      >
     >,
   ): Promise<VoiceRoomRecord | null>;
 }
