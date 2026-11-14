@@ -24,6 +24,7 @@ export interface TicketTranscriptEntry {
     readonly size: number;
     readonly url: string;
   }[];
+  readonly authorBot: boolean;
   readonly authorId: string;
   readonly authorName: string;
   readonly components: readonly unknown[];

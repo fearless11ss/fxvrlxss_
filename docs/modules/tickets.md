@@ -48,13 +48,14 @@ its stable key.
   them.
 - Ticket messages are archived in the database and are excluded from the public
   custom automoderation path so evidence and support context are not removed.
-- Transcripts contain message authors, timestamps, text, and attachment
-  metadata. Embeds, Components V2 data, stickers, replies, and edit timestamps
-  are preserved as well. Discord tokens and panel credentials are never
-  included.
+- The PostgreSQL archive preserves message authors, timestamps, text,
+  attachment metadata, embeds, Components V2 data, stickers, replies, and edit
+  timestamps. Discord tokens and panel credentials are never included.
 - Discord receives the complete transcript as UTF-8 text attachments. Large
   histories are split across numbered files and, when necessary, multiple
-  messages so card and upload limits do not truncate their contents.
+  messages so card and upload limits do not truncate their contents. The export
+  uses Russian labels and Moscow time, omits the bot's control panel, and turns
+  embed data into readable text instead of raw JSON.
 - Dashboard changes are immutable drafts. Only the bot acknowledges a queued
   version as published after it updates the pinned Discord panel.
 

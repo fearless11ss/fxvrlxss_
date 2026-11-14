@@ -20,45 +20,125 @@ function ticketNumber(value: number): string {
   return String(value).padStart(4, "0");
 }
 
-function json(value: readonly unknown[]): string {
-  return JSON.stringify(value, null, 2);
+function dateTime(value: string | Date): string {
+  return `${new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    month: "2-digit",
+    second: "2-digit",
+    timeZone: "Europe/Moscow",
+    year: "numeric",
+  }).format(new Date(value))} МСК`;
 }
 
-function formatEntry(entry: TicketTranscriptEntry): string {
+function record(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function text(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function formatEmbeds(embeds: readonly unknown[]): string | undefined {
+  const lines: string[] = [];
+  for (const [index, rawEmbed] of embeds.entries()) {
+    const embed = record(rawEmbed);
+    if (!embed) continue;
+    const author = record(embed.author);
+    const footer = record(embed.footer);
+    const image = record(embed.image);
+    const thumbnail = record(embed.thumbnail);
+    const fields = Array.isArray(embed.fields) ? embed.fields : [];
+    const details = [
+      text(author?.name) ? `Автор: ${text(author?.name)}` : undefined,
+      text(embed.title) ? `Заголовок: ${text(embed.title)}` : undefined,
+      text(embed.description),
+      text(embed.url) ? `Ссылка: ${text(embed.url)}` : undefined,
+      ...fields.flatMap((rawField) => {
+        const field = record(rawField);
+        return field
+          ? [`${text(field.name) ?? "Поле"}: ${text(field.value) ?? "—"}`]
+          : [];
+      }),
+      text(image?.url) ? `Изображение: ${text(image?.url)}` : undefined,
+      text(thumbnail?.url) ? `Миниатюра: ${text(thumbnail?.url)}` : undefined,
+      text(footer?.text) ? `Подпись: ${text(footer?.text)}` : undefined,
+    ].filter((line): line is string => Boolean(line));
+    if (details.length > 0) {
+      lines.push(`Встроенная карточка ${index + 1}:`, ...details);
+    }
+  }
+  return lines.length > 0 ? lines.join("\n") : undefined;
+}
+
+function replaceKnownMentions(
+  content: string,
+  authorNames: ReadonlyMap<string, string>,
+): string {
+  return content.replaceAll(/<@!?(\d+)>/g, (mention, id: string) => {
+    const name = authorNames.get(id);
+    return name ? `@${name}` : mention;
+  });
+}
+
+function isControlPanel(entry: TicketTranscriptEntry): boolean {
+  return (
+    Boolean(entry.authorBot) &&
+    entry.content.trim().length === 0 &&
+    entry.attachments.length === 0 &&
+    entry.stickers.length === 0 &&
+    entry.embeds.length === 0 &&
+    entry.components.length > 0
+  );
+}
+
+export function countReadableTicketTranscriptEntries(
+  entries: readonly TicketTranscriptEntry[],
+): number {
+  return entries.filter((entry) => !isControlPanel(entry)).length;
+}
+
+function formatEntry(
+  entry: TicketTranscriptEntry,
+  authorNames: ReadonlyMap<string, string>,
+): string {
+  const embedText = formatEmbeds(entry.embeds);
   const sections = [
-    `[${entry.createdAt}] ${entry.authorName} (${entry.authorId})`,
-    `Message ID: ${entry.messageId}`,
-    entry.editedAt ? `Edited at: ${entry.editedAt}` : undefined,
+    `${dateTime(entry.createdAt)} — ${entry.authorName}${entry.authorBot ? " [бот]" : ""}`,
+    entry.editedAt ? `Изменено: ${dateTime(entry.editedAt)}` : undefined,
     entry.referencedMessageId
-      ? `Reply to message: ${entry.referencedMessageId}`
+      ? `↳ Ответ на сообщение ${entry.referencedMessageId}`
       : undefined,
     "",
-    entry.content || "[без текстового содержимого]",
+    entry.content
+      ? replaceKnownMentions(entry.content, authorNames)
+      : "[сообщение без текста]",
     entry.attachments.length > 0
       ? [
           "",
-          "Attachments:",
+          "Вложения:",
           ...entry.attachments.map(
             (attachment) =>
-              `- ${attachment.name} (${attachment.size} bytes): ${attachment.url}`,
+              `- ${attachment.name} (${attachment.size} байт)\n  ${attachment.url}`,
           ),
         ].join("\n")
       : undefined,
     entry.stickers.length > 0
       ? [
           "",
-          "Stickers:",
+          "Стикеры:",
           ...entry.stickers.map(
-            (sticker) => `- ${sticker.name} (${sticker.id}): ${sticker.url}`,
+            (sticker) => `- ${sticker.name}\n  ${sticker.url}`,
           ),
         ].join("\n")
       : undefined,
-    entry.embeds.length > 0 ? `\nEmbeds:\n${json(entry.embeds)}` : undefined,
-    entry.components.length > 0
-      ? `\nComponents:\n${json(entry.components)}`
-      : undefined,
+    embedText ? `\n${embedText}` : undefined,
   ];
-  return `${sections.filter((section) => section !== undefined).join("\n")}\n${"-".repeat(72)}\n`;
+  return `${sections.filter((section) => section !== undefined).join("\n")}\n${"─".repeat(72)}\n`;
 }
 
 function splitUtf8(value: string, maximumBytes: number): string[] {
@@ -86,17 +166,21 @@ export function buildTicketTranscriptFiles(
   maximumBytes = DEFAULT_MAX_FILE_BYTES,
 ): readonly TicketTranscriptFile[] {
   const number = ticketNumber(ticket.number);
+  const visibleEntries = entries.filter((entry) => !isControlPanel(entry));
+  const authorNames = new Map(
+    visibleEntries.map((entry) => [entry.authorId, entry.authorName] as const),
+  );
+  const ticketAuthor = authorNames.get(ticket.authorId);
   const header = [
-    "FXVRLXSS_ TICKET TRANSCRIPT",
-    `Ticket: #${number}`,
-    `Type: ${metadata.typeLabel}`,
-    `Author ID: ${ticket.authorId}`,
-    `Subject: ${ticket.subject}`,
-    `Description: ${ticket.description}`,
-    `Close reason: ${metadata.reason}`,
-    `Closed at: ${metadata.closedAt.toISOString()}`,
-    `Messages: ${entries.length}`,
-    "=".repeat(72),
+    `Транскрипт тикета #${number}`,
+    `Тип обращения: ${metadata.typeLabel}`,
+    `Автор: ${ticketAuthor ?? "неизвестный пользователь"} (ID: ${ticket.authorId})`,
+    `Тема: ${ticket.subject}`,
+    `Описание: ${ticket.description}`,
+    `Причина закрытия: ${metadata.reason}`,
+    `Закрыт: ${dateTime(metadata.closedAt)}`,
+    `Сообщений в диалоге: ${visibleEntries.length}`,
+    "═".repeat(72),
     "",
   ].join("\n");
   if (Buffer.byteLength(header) >= maximumBytes) {
@@ -105,8 +189,8 @@ export function buildTicketTranscriptFiles(
 
   const chunks: string[] = [];
   let current = header;
-  for (const entry of entries) {
-    const block = formatEntry(entry);
+  for (const entry of visibleEntries) {
+    const block = formatEntry(entry, authorNames);
     const available = maximumBytes - Buffer.byteLength(header);
     for (const part of splitUtf8(block, available)) {
       if (Buffer.byteLength(current) + Buffer.byteLength(part) > maximumBytes) {

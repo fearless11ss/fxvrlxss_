@@ -38,7 +38,10 @@ import type {
   TicketRepository,
   TicketTranscriptEntry,
 } from "./ticket-repository.js";
-import { buildTicketTranscriptFiles } from "./ticket-transcript.js";
+import {
+  buildTicketTranscriptFiles,
+  countReadableTicketTranscriptEntries,
+} from "./ticket-transcript.js";
 
 const PANEL_SELECT_ID = "ticket:type";
 const OPEN_MODAL_PREFIX = "ticket:create:";
@@ -221,6 +224,7 @@ async function transcript(
           size: attachment.size,
           url: attachment.url,
         })),
+        authorBot: message.author.bot,
         authorId: message.author.id,
         authorName:
           message.member?.displayName ??
@@ -812,7 +816,7 @@ export class TicketModule implements TicketConfigurationApplier {
                   `Автор: <@${ticket.authorId}>`,
                   `Канал: <#${ticket.channelId}>`,
                   `Причина закрытия: ${escapeMarkdown(reason)}`,
-                  `Сообщений: ${entries.length} · файлов: ${files.length}`,
+                  `Сообщений: ${countReadableTicketTranscriptEntries(entries)} · файлов: ${files.length}`,
                 ].join("\n")
               : `## Транскрипт тикета #${ticketNumber(ticket.number)} · продолжение`,
           ),

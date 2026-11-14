@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { buildTicketTranscriptFiles } from "./ticket-transcript.js";
+import {
+  buildTicketTranscriptFiles,
+  countReadableTicketTranscriptEntries,
+} from "./ticket-transcript.js";
 import type {
   TicketRecord,
   TicketTranscriptEntry,
@@ -28,6 +31,7 @@ const entry: TicketTranscriptEntry = {
       url: "https://cdn.discordapp.com/evidence.png",
     },
   ],
+  authorBot: false,
   authorId: "user-1",
   authorName: "Участник",
   components: [],
@@ -54,11 +58,56 @@ describe("ticket transcript files", () => {
     const content = file?.data.toString("utf8") ?? "";
 
     expect(file?.name).toBe("ticket-0007-transcript-01.txt");
-    expect(content).toContain("Type: Помощь");
-    expect(content).toContain("Close reason: Вопрос решён");
-    expect(content).toContain("Участник (user-1)");
+    expect(content).toContain("Тип обращения: Помощь");
+    expect(content).toContain("Причина закрытия: Вопрос решён");
+    expect(content).toContain("Автор: Участник (ID: user-1)");
     expect(content).toContain("Полный текст сообщения без сокращения.");
-    expect(content).toContain("evidence.png (42 bytes)");
+    expect(content).toContain("evidence.png (42 байт)");
+  });
+
+  it("omits the bot control panel and renders a human-readable Russian dialogue", () => {
+    const botControlEntry = {
+      ...entry,
+      attachments: [],
+      authorBot: true,
+      authorId: "bot-1",
+      authorName: "fxvrlxss_",
+      components: [
+        {
+          components: [
+            {
+              custom_id: "ticket:claim",
+              label: "Взять",
+              type: 2,
+            },
+          ],
+          type: 17,
+        },
+      ],
+      content: "",
+      messageId: "control-message",
+    };
+    const [file] = buildTicketTranscriptFiles(
+      ticket,
+      {
+        closedAt: new Date("2026-11-14T00:01:00.000Z"),
+        reason: "Вопрос решён",
+        typeLabel: "Помощь",
+      },
+      [botControlEntry, entry],
+    );
+    const content = file?.data.toString("utf8") ?? "";
+
+    expect(content).toContain("Транскрипт тикета #0007");
+    expect(content).toContain("Сообщений в диалоге: 1");
+    expect(content).toContain("Участник");
+    expect(content).toContain("Полный текст сообщения без сокращения.");
+    expect(content).not.toContain("FXVRLXSS_ TICKET TRANSCRIPT");
+    expect(content).not.toContain("Components:");
+    expect(content).not.toContain("custom_id");
+    expect(countReadableTicketTranscriptEntries([botControlEntry, entry])).toBe(
+      1,
+    );
   });
 
   it("splits a long Unicode transcript without losing its contents", () => {
