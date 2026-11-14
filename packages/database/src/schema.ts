@@ -148,6 +148,7 @@ export const tickets = pgTable(
     autoCloseDisabled: boolean("auto_close_disabled").default(false).notNull(),
     claimedAt: timestamp("claimed_at", { withTimezone: true }),
     closedAt: timestamp("closed_at", { withTimezone: true }),
+    channelDeletedAt: timestamp("channel_deleted_at", { withTimezone: true }),
     reopenedAt: timestamp("reopened_at", { withTimezone: true }),
     ...timestamps,
   },

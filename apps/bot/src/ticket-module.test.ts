@@ -9,6 +9,7 @@ const ticket: TicketRecord = {
   assignedToId: null,
   authorId: "user-1",
   channelId: "channel-1",
+  channelDeletedAt: null,
   controlMessageId: "message-1",
   description: "Подробное описание обращения",
   id: "ticket-1",
@@ -44,7 +45,7 @@ describe("ticket Components V2", () => {
     expect(serialized).toContain("ticket:close");
   });
 
-  it("offers reopening only for a closed ticket", () => {
+  it("offers reopening and safe channel deletion for a closed ticket", () => {
     const controls = buildTicketControls(
       { ...ticket, status: "closed" },
       defaultTicketConfig,
@@ -52,6 +53,18 @@ describe("ticket Components V2", () => {
     const serialized = JSON.stringify(controls);
 
     expect(serialized).toContain("ticket:reopen");
+    expect(serialized).toContain("ticket:delete");
     expect(serialized).not.toContain("ticket:claim");
+  });
+
+  it("does not offer Discord actions after the channel is deleted", () => {
+    const controls = buildTicketControls(
+      { ...ticket, channelDeletedAt: new Date(), status: "closed" },
+      defaultTicketConfig,
+    )[0]?.toJSON();
+    const serialized = JSON.stringify(controls);
+
+    expect(serialized).not.toContain("ticket:reopen");
+    expect(serialized).not.toContain("ticket:delete");
   });
 });

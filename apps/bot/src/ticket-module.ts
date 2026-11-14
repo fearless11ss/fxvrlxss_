@@ -46,10 +46,20 @@ import {
 const PANEL_SELECT_ID = "ticket:type";
 const OPEN_MODAL_PREFIX = "ticket:create:";
 const CLOSE_MODAL_ID = "ticket:close:submit";
+const DELETE_MODAL_ID = "ticket:delete:submit";
 const ACTIVE_STATES = new Set(["claimed", "open", "reopened"]);
 
 function ticketNumber(value: number): string {
   return String(value).padStart(4, "0");
+}
+
+function isUnknownDiscordChannel(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === 10_003
+  );
 }
 
 function ticketType(config: TicketConfig, key: string) {
@@ -104,12 +114,20 @@ export function buildTicketControls(
   const closed = ticket.status === "closed";
   const row = new ActionRowBuilder<ButtonBuilder>();
   if (closed) {
-    if (config.allowReopen) {
+    if (config.allowReopen && !ticket.channelDeletedAt) {
       row.addComponents(
         new ButtonBuilder()
           .setCustomId("ticket:reopen")
           .setLabel("Открыть повторно")
           .setStyle(ButtonStyle.Secondary),
+      );
+    }
+    if (!ticket.channelDeletedAt) {
+      row.addComponents(
+        new ButtonBuilder()
+          .setCustomId("ticket:delete")
+          .setLabel("Удалить канал")
+          .setStyle(ButtonStyle.Danger),
       );
     }
   } else {
@@ -207,6 +225,28 @@ function closeTicketModal(): ModalBuilder {
     );
 }
 
+function deleteTicketChannelModal(ticket: TicketRecord): ModalBuilder {
+  return new ModalBuilder()
+    .setCustomId(DELETE_MODAL_ID)
+    .setTitle("Удалить канал тикета")
+    .addLabelComponents(
+      new LabelBuilder()
+        .setLabel(`Введите номер тикета: ${ticketNumber(ticket.number)}`)
+        .setDescription(
+          "Канал исчезнет безвозвратно. Запись и транскрипт останутся в базе.",
+        )
+        .setTextInputComponent(
+          new TextInputBuilder()
+            .setCustomId("ticketNumber")
+            .setMaxLength(12)
+            .setMinLength(4)
+            .setPlaceholder(ticketNumber(ticket.number))
+            .setRequired(true)
+            .setStyle(TextInputStyle.Short),
+        ),
+    );
+}
+
 async function transcript(
   channel: TextChannel,
 ): Promise<readonly TicketTranscriptEntry[]> {
@@ -288,6 +328,7 @@ export class TicketModule implements TicketConfigurationApplier {
 
   async start(): Promise<void> {
     await this.#ensurePanel();
+    await this.#refreshClosedControls();
     this.#timer = setInterval(() => void this.#closeInactive(), 60_000);
     this.#timer.unref();
   }
@@ -301,6 +342,7 @@ export class TicketModule implements TicketConfigurationApplier {
   async apply(config: TicketConfig): Promise<void> {
     this.#config = ticketConfigSchema.parse(config);
     await this.#ensurePanel();
+    await this.#refreshClosedControls();
   }
 
   async handleMessage(message: Message): Promise<boolean> {
@@ -410,6 +452,73 @@ export class TicketModule implements TicketConfigurationApplier {
         interaction.user.id,
       );
       await interaction.editReply("Тикет закрыт, транскрипт сохранён.");
+      return true;
+    }
+
+    if (interaction.isButton() && customId === "ticket:delete") {
+      if (!(await this.#requireStaff(interaction, staff))) return true;
+      if (ticket.status !== "closed" || ticket.channelDeletedAt) {
+        await interaction.reply({
+          content: "Удалить можно только канал закрытого тикета.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return true;
+      }
+      await interaction.showModal(deleteTicketChannelModal(ticket));
+      return true;
+    }
+
+    if (interaction.isModalSubmit() && customId === DELETE_MODAL_ID) {
+      if (!(await this.#requireStaff(interaction, staff))) return true;
+      if (ticket.status !== "closed" || ticket.channelDeletedAt) {
+        await interaction.reply({
+          content: "Канал уже удалён или тикет больше не закрыт.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return true;
+      }
+      const expected = ticketNumber(ticket.number);
+      if (
+        interaction.fields.getTextInputValue("ticketNumber").trim() !== expected
+      ) {
+        await interaction.reply({
+          content: `Номер не совпадает. Для подтверждения введите ${expected}.`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return true;
+      }
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      const channel = await this.#textChannel(ticket.channelId);
+      const channelName = channel.name;
+      await channel.delete(
+        `fxvrlxss_ ticket #${expected} channel deleted by ${interaction.user.id}`,
+      );
+      const deleted = await this.#repository.markChannelDeleted(
+        ticket.channelId,
+      );
+      if (!deleted) {
+        throw new Error(
+          `Deleted ticket channel was not marked in database: ${ticket.channelId}`,
+        );
+      }
+      await this.#audit.publish({
+        actor: { id: interaction.user.id, kind: "user" },
+        category: "bot",
+        discord: true,
+        eventType: "ticket.channel_deleted",
+        payload: {
+          channelId: ticket.channelId,
+          channelName,
+          ticketNumber: ticket.number,
+        },
+        summary: `Удалён Discord-канал закрытого тикета #${expected} \`${escapeMarkdown(channelName)}\`. Запись и транскрипт сохранены в PostgreSQL.`,
+        title: "Канал тикета удалён",
+      });
+      await interaction
+        .editReply(
+          `Канал тикета #${expected} удалён. Запись и транскрипт сохранены.`,
+        )
+        .catch(() => undefined);
       return true;
     }
 
@@ -705,6 +814,30 @@ export class TicketModule implements TicketConfigurationApplier {
       components: buildTicketControls(ticket, this.#config),
       flags: MessageFlags.IsComponentsV2,
     });
+  }
+
+  async #refreshClosedControls(): Promise<void> {
+    const tickets = await this.#repository.findClosedWithChannels(
+      this.#guild.id,
+    );
+    for (const ticket of tickets) {
+      try {
+        await this.#updateControl(ticket);
+      } catch (error) {
+        if (isUnknownDiscordChannel(error)) {
+          await this.#repository.markChannelDeleted(ticket.channelId);
+          this.#logger.info(
+            { channelId: ticket.channelId, ticketNumber: ticket.number },
+            "missing closed ticket channel marked as deleted",
+          );
+          continue;
+        }
+        this.#logger.error(
+          { channelId: ticket.channelId, error, ticketNumber: ticket.number },
+          "closed ticket controls refresh failed",
+        );
+      }
+    }
   }
 
   async #setMemberSendPermissions(

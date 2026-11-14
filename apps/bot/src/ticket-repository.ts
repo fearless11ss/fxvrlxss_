@@ -4,6 +4,7 @@ export interface TicketRecord {
   readonly assignedToId: string | null;
   readonly authorId: string;
   readonly channelId: string;
+  readonly channelDeletedAt: Date | null;
   readonly controlMessageId: string | null;
   readonly description: string;
   readonly id: string;
@@ -51,7 +52,9 @@ export interface TicketRepository {
     transcript: readonly TicketTranscriptEntry[] | null,
   ): Promise<TicketRecord | null>;
   findByChannel(channelId: string): Promise<TicketRecord | null>;
+  findClosedWithChannels(guildId: string): Promise<readonly TicketRecord[]>;
   findInactive(guildId: string, before: Date): Promise<readonly TicketRecord[]>;
+  markChannelDeleted(channelId: string): Promise<TicketRecord | null>;
   reopen(channelId: string): Promise<TicketRecord | null>;
   reserve(input: {
     readonly authorId: string;

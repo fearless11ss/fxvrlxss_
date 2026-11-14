@@ -678,8 +678,7 @@ export async function startGuildCore(
           name: channel.name,
           type: channel.type,
         },
-        subject: { id: channel.id, kind: "channel" },
-        summary: `Удалён канал \`${channel.name}\`.`,
+        summary: `Удалён канал \`${channel.name}\` (ID: \`${channel.id}\`).`,
         title: "Канал удалён",
       });
     }

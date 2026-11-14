@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { Database } from "@fxvrlxss/database/client";
 import { tickets } from "@fxvrlxss/database/schema";
-import { and, asc, eq, inArray, like, lt, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, like, lt, sql } from "drizzle-orm";
 
 import type {
   TicketRecord,
@@ -18,6 +18,7 @@ function record(row: typeof tickets.$inferSelect): TicketRecord {
     assignedToId: row.assignedToId,
     authorId: row.authorId,
     channelId: row.channelId,
+    channelDeletedAt: row.channelDeletedAt,
     controlMessageId: row.controlMessageId,
     description: row.description,
     id: row.id,
@@ -170,7 +171,27 @@ export class DatabaseTicketRepository implements TicketRepository {
         updatedAt: new Date(),
       })
       .where(
-        and(eq(tickets.channelId, channelId), eq(tickets.status, "closed")),
+        and(
+          eq(tickets.channelId, channelId),
+          eq(tickets.status, "closed"),
+          isNull(tickets.channelDeletedAt),
+        ),
+      )
+      .returning();
+    return updated ? record(updated) : null;
+  }
+
+  async markChannelDeleted(channelId: string): Promise<TicketRecord | null> {
+    const now = new Date();
+    const [updated] = await this.#database
+      .update(tickets)
+      .set({ channelDeletedAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(tickets.channelId, channelId),
+          eq(tickets.status, "closed"),
+          isNull(tickets.channelDeletedAt),
+        ),
       )
       .returning();
     return updated ? record(updated) : null;
@@ -228,6 +249,23 @@ export class DatabaseTicketRepository implements TicketRepository {
         ),
       )
       .orderBy(asc(tickets.updatedAt));
+    return rows.map(record);
+  }
+
+  async findClosedWithChannels(
+    guildId: string,
+  ): Promise<readonly TicketRecord[]> {
+    const rows = await this.#database
+      .select()
+      .from(tickets)
+      .where(
+        and(
+          eq(tickets.guildId, guildId),
+          eq(tickets.status, "closed"),
+          isNull(tickets.channelDeletedAt),
+        ),
+      )
+      .orderBy(asc(tickets.number));
     return rows.map(record);
   }
 }

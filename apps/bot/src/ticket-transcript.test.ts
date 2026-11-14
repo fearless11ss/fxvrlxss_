@@ -13,6 +13,7 @@ const ticket: TicketRecord = {
   assignedToId: "staff-1",
   authorId: "user-1",
   channelId: "channel-1",
+  channelDeletedAt: null,
   controlMessageId: "message-control",
   description: "Подробности обращения",
   id: "ticket-1",

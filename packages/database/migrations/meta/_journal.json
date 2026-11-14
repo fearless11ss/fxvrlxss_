@@ -36,6 +36,13 @@
       "when": 1794607200000,
       "tag": "0004_ticket_module",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794693600000,
+      "tag": "0005_ticket_channel_deletion",
+      "breakpoints": true
     }
   ]
 }

@@ -35,7 +35,12 @@ its stable key.
    `КОМАНДА/обсуждение-обращений`, locks member replies, and keeps the channel
    for review. Staff can reopen it when the published configuration allows
    this.
-6. Optional inactivity handling closes untouched tickets after the configured
+6. Staff can permanently delete the Discord channel of a closed ticket by
+   entering its exact ticket number in a confirmation dialog. The database
+   record and transcript remain intact, the deletion time is recorded, and the
+   ticket cannot be reopened afterward. Open ticket channels cannot be deleted
+   through this action.
+7. Optional inactivity handling closes untouched tickets after the configured
    number of hours. A value of `0` disables automatic closing.
 
 ## Invariants
