@@ -24,11 +24,15 @@ describe("temporary voice Components V2", () => {
       room,
       defaultVoiceConfig,
       "Комната владельца",
-    )[0]?.toJSON();
+    ).map((component) => component.toJSON());
     const serialized = JSON.stringify(controls);
 
     expect(serialized).toContain("Временные голосовые комнаты");
     expect(serialized).toContain("<@owner-1>");
+    expect(controls[0]).toMatchObject({
+      content: "<@owner-1>",
+      type: 10,
+    });
     expect(serialized).toContain("voice:rename:open");
     expect(serialized).toContain("voice:limit:open");
     expect(serialized).toContain("voice:lock");
@@ -44,7 +48,7 @@ describe("temporary voice Components V2", () => {
       { ...room, hidden: true, locked: true, userLimit: 4 },
       defaultVoiceConfig,
       "Закрытая комната",
-    )[0]?.toJSON();
+    ).map((component) => component.toJSON());
     const serialized = JSON.stringify(controls);
 
     expect(serialized).toContain("Открыть вход");

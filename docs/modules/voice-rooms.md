@@ -22,7 +22,9 @@ children; it is not a separate channel or nested category.
 3. If the member already owns a room, the bot moves them back to that room
    instead of creating a duplicate.
 4. The bot posts a persistent Components V2 control panel in the text chat of
-   the new voice channel. Only the current owner can use its actions.
+   the new voice channel and mentions the owner above it in the same message.
+   Only the current owner can use its actions. Reconciliation and control-panel
+   recovery do not send another notification.
 5. When the owner leaves an occupied room, ownership passes to a remaining
    human member who does not already own another room.
 6. When no human members remain, the Discord channel and its active database

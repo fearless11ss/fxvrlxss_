@@ -50,7 +50,7 @@ export function buildVoiceRoomControls(
   room: VoiceRoomRecord,
   config: VoiceConfig,
   channelName: string,
-): ContainerBuilder[] {
+): Array<TextDisplayBuilder | ContainerBuilder> {
   const primary = new ActionRowBuilder<ButtonBuilder>();
   if (config.controls.allowRename) {
     primary.addComponents(
@@ -127,7 +127,7 @@ export function buildVoiceRoomControls(
     );
   if (primary.components.length > 0) container.addActionRowComponents(primary);
   if (members.components.length > 0) container.addActionRowComponents(members);
-  return [container];
+  return [new TextDisplayBuilder().setContent(`<@${room.ownerId}>`), container];
 }
 
 function accessKindLabel(kind: VoiceAccessKind): string {
@@ -649,7 +649,7 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
         userLimit: this.#config.defaultUserLimit,
       });
       await this.#applyAccess(created, channel);
-      created = await this.#ensureRoomControl(created, channel);
+      created = await this.#ensureRoomControl(created, channel, true);
       await member.voice.setChannel(
         channel,
         "fxvrlxss_ temporary room created",
@@ -879,6 +879,7 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
   async #ensureRoomControl(
     room: VoiceRoomRecord,
     channel: VoiceChannel,
+    notifyOwner = false,
   ): Promise<VoiceRoomRecord> {
     const existing = room.controlMessageId
       ? await channel.messages.fetch(room.controlMessageId).catch(() => null)
@@ -892,7 +893,9 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
       return room;
     }
     const control = await channel.send({
-      allowedMentions: { parse: [] },
+      allowedMentions: notifyOwner
+        ? { parse: [], users: [room.ownerId] }
+        : { parse: [] },
       components: buildVoiceRoomControls(room, this.#config, channel.name),
       flags: MessageFlags.IsComponentsV2,
     });
