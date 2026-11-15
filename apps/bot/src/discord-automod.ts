@@ -22,7 +22,11 @@ function inviteActions(
   config: AutomodConfig,
   resources: GuildResources,
 ): readonly AutoModerationActionOptions[] {
-  if (config.mode === "observe" || config.inviteLinks.action === "observe") {
+  if (
+    config.mode !== "enforce" ||
+    config.inviteLinks.action === "observe" ||
+    config.inviteLinks.action === "points"
+  ) {
     return [
       {
         metadata: { channel: resources.channels.logs.security },
@@ -38,12 +42,6 @@ function inviteActions(
       type: AutoModerationActionType.BlockMessage,
     },
   ];
-  if (config.inviteLinks.action === "timeout") {
-    actions.push({
-      metadata: { durationSeconds: config.inviteLinks.timeoutMinutes * 60 },
-      type: AutoModerationActionType.Timeout,
-    });
-  }
   return actions;
 }
 

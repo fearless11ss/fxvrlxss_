@@ -26,6 +26,7 @@ describe("automodConfigSchema", () => {
       "repeatedMessages",
     ]) {
       delete (legacy[key] as Record<string, unknown>).timeoutMinutes;
+      delete (legacy[key] as Record<string, unknown>).points;
     }
     legacy.timeoutMinutes = 10;
     delete legacy.messageLength;
@@ -34,6 +35,7 @@ describe("automodConfigSchema", () => {
     expect(parsed.attachmentPolicy.maximumPerWindow).toBe(4);
     expect(parsed.attachmentPolicy.windowSeconds).toBe(30);
     expect(parsed.flood.timeoutMinutes).toBe(10);
+    expect(parsed.flood.points).toBe(0);
     expect(parsed.inviteLinks.timeoutMinutes).toBe(10);
     expect(parsed.messageLength).toMatchObject({
       enabled: false,
@@ -61,6 +63,16 @@ describe("automodConfigSchema", () => {
       automodConfigSchema.parse({
         ...defaultAutomodConfig,
         flood: { ...defaultAutomodConfig.flood, timeoutMinutes: 0 },
+      }),
+    ).toThrow();
+    expect(() =>
+      automodConfigSchema.parse({
+        ...defaultAutomodConfig,
+        flood: {
+          ...defaultAutomodConfig.flood,
+          action: "points",
+          points: 0,
+        },
       }),
     ).toThrow();
   });

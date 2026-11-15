@@ -113,6 +113,7 @@ export const moderationCases = pgTable(
     guildId: text("guild_id").notNull(),
     userId: text("user_id").notNull(),
     moderatorId: text("moderator_id").notNull(),
+    sourceEventKey: text("source_event_key"),
     status: moderationCaseStatus("status").default("open").notNull(),
     requestedAction: text("requested_action")
       .$type<"warn" | "timeout" | "kick" | "ban">()
@@ -138,6 +139,10 @@ export const moderationCases = pgTable(
   },
   (table) => [
     uniqueIndex("moderation_cases_number_unique").on(table.number),
+    uniqueIndex("moderation_cases_source_event_unique").on(
+      table.guildId,
+      table.sourceEventKey,
+    ),
     index("moderation_cases_user_idx").on(table.guildId, table.userId),
     index("moderation_cases_status_idx").on(table.status),
     index("moderation_cases_active_points_idx").on(

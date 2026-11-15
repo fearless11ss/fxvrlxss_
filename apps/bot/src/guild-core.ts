@@ -16,7 +16,11 @@ import type { Logger } from "pino";
 
 import { AuditBus, type AuditWriter } from "./audit.js";
 import { AsyncEventGate } from "./async-event-gate.js";
-import { automodActionLabel, buildAutomodLogSummary } from "./automod-log.js";
+import {
+  automodActionLabel,
+  automodSignalLabel,
+  buildAutomodLogSummary,
+} from "./automod-log.js";
 import type { AutomodPublicationRepository } from "./automod-publication.js";
 import { AutomodPublicationWorker } from "./automod-publication.js";
 import { AutomodRuntime } from "./automod-runtime.js";
@@ -42,6 +46,8 @@ import {
 } from "./guild-resource-catalog.js";
 import type { MessageArchiveReader } from "./message-archive.js";
 import { ModerationModule } from "./moderation-module.js";
+import type { ModerationSystemPublicationRepository } from "./moderation-system-publication.js";
+import { ModerationSystemPublicationWorker } from "./moderation-system-publication.js";
 import type { ModerationPublicationRepository } from "./moderation-publication.js";
 import { ModerationPublicationWorker } from "./moderation-publication.js";
 import type { ModerationRepository } from "./moderation-repository.js";
@@ -70,6 +76,7 @@ export interface GuildCoreOptions {
   readonly messageArchiveReader?: MessageArchiveReader;
   readonly moderationPublicationRepository?: ModerationPublicationRepository;
   readonly moderationRepository?: ModerationRepository;
+  readonly moderationSystemPublicationRepository?: ModerationSystemPublicationRepository;
   readonly persistentWriters?: readonly AuditWriter[];
   readonly ticketPublicationRepository?: TicketPublicationRepository;
   readonly ticketRepository?: TicketRepository;
@@ -78,17 +85,24 @@ export interface GuildCoreOptions {
   readonly voiceRoomRepository?: VoiceRoomRepository;
 }
 
+function isMemberAutomodExempt(
+  member: GuildMember | null,
+  runtime: AutomodRuntime,
+): boolean {
+  return (
+    !member ||
+    member.permissions.has(PermissionFlagsBits.Administrator) ||
+    member.id === member.guild.ownerId ||
+    member.roles.cache.some((role) =>
+      runtime.config.exemptRoleIds.includes(role.id),
+    )
+  );
+}
+
 function isAutomodExempt(message: Message, runtime: AutomodRuntime): boolean {
-  const member = message.member;
   return (
     runtime.config.exemptChannelIds.includes(message.channelId) ||
-    Boolean(
-      member?.permissions.has(PermissionFlagsBits.Administrator) ||
-      member?.permissions.has(PermissionFlagsBits.ManageMessages) ||
-      member?.roles.cache.some((role) =>
-        runtime.config.exemptRoleIds.includes(role.id),
-      ),
-    )
+    isMemberAutomodExempt(message.member, runtime)
   );
 }
 
@@ -138,7 +152,7 @@ function toModerationMessage(message: Message) {
     })),
     channelId: message.channelId,
     content: message.content,
-    createdAt: message.createdTimestamp,
+    createdAt: message.editedTimestamp ?? message.createdTimestamp,
     id: message.id,
     userId: message.author.id,
   };
@@ -316,6 +330,7 @@ export async function startGuildCore(
         audit,
         guild,
         logger,
+        quarantineRoleId: resources.roles.quarantine,
         repository: options.moderationRepository,
       })
     : undefined;
@@ -325,6 +340,19 @@ export async function startGuildCore(
           applier: moderationModule,
           logger,
           repository: options.moderationPublicationRepository,
+        })
+      : undefined;
+  const moderationSystemPublicationWorker =
+    moderationModule && options.moderationSystemPublicationRepository
+      ? new ModerationSystemPublicationWorker({
+          applier: {
+            async apply(config) {
+              await discordAutomod.apply(config.automod);
+              await moderationModule.apply(config.manual);
+            },
+          },
+          logger,
+          repository: options.moderationSystemPublicationRepository,
         })
       : undefined;
   const ticketModule = options.ticketRepository
@@ -370,6 +398,7 @@ export async function startGuildCore(
   await publicationWorker?.start();
   await moderationModule?.start();
   await moderationPublicationWorker?.start();
+  await moderationSystemPublicationWorker?.start();
   await ticketModule?.start();
   await ticketPublicationWorker?.start();
   await voiceModule?.start();
@@ -479,23 +508,10 @@ export async function startGuildCore(
     });
   });
 
-  safeOn(Events.MessageCreate, async (message) => {
-    if (message.guildId !== guildId) return;
-    await audit.publish({
-      actor: { id: message.author.id, kind: "user" },
-      category: "messages",
-      discord: false,
-      eventType: "message.created",
-      payload: messagePayload(message),
-      subject: {
-        channelId: message.channelId,
-        id: message.id,
-        kind: "message",
-      },
-      summary: "Сообщение сохранено в полном журнале.",
-      title: "Создано сообщение",
-    });
-
+  const inspectAutomodMessage = async (
+    message: Message,
+    sourceEventKey: string,
+  ): Promise<void> => {
     if (await ticketModule?.handleMessage(message)) return;
     if (message.author.bot || isAutomodExempt(message, automodRuntime)) return;
     const decision = automodRuntime.inspect(toModerationMessage(message));
@@ -524,32 +540,42 @@ export async function startGuildCore(
       ),
       title: "Сработала автомодерация",
     });
-    if (decision.action === "observe") return;
+    if (decision.action === "observe" && decision.points === 0) return;
     try {
-      await applyCustomSanction(
-        message,
-        decision.action,
-        decision.timeoutMinutes,
-        resources.roles.quarantine,
-      );
-      await audit.publish({
-        category: "moderation",
-        discord: true,
-        eventType: "moderation.action_applied",
-        payload: {
-          action: decision.action,
-          findings: decision.findings,
+      if (moderationModule) {
+        await moderationModule.applyAutomodViolation({
+          action:
+            automodRuntime.config.mode === "points"
+              ? "points"
+              : decision.action === "observe" && decision.points > 0
+                ? "points"
+                : decision.action,
+          applyThresholds: automodRuntime.config.mode === "enforce",
+          channelId: message.channelId,
+          message,
           messageId: message.id,
-        },
-        severity: "warning",
-        subject: { id: message.author.id, kind: "user" },
-        summary: buildAutomodLogSummary(
-          automodRuntime.config,
-          decision,
-          message.channelId,
-        ),
-        title: "Автомодерация применила действие",
-      });
+          points: decision.points,
+          signals: decision.findings.map(({ signal }) => signal),
+          sourceEventKey,
+          summary: decision.findings
+            .map(({ signal }) => automodSignalLabel(signal))
+            .join(", "),
+          timeoutMinutes: decision.timeoutMinutes,
+          userId: message.author.id,
+        });
+      } else if (
+        decision.action !== "observe" &&
+        decision.action !== "points"
+      ) {
+        await applyCustomSanction(
+          message,
+          decision.action,
+          decision.timeoutMinutes,
+          resources.roles.quarantine,
+        );
+      } else {
+        throw new Error("Хранилище дел модерации недоступно");
+      }
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       await audit.publish({
@@ -568,37 +594,69 @@ export async function startGuildCore(
         title: "Ошибка автомодерации",
       });
     }
+  };
+
+  safeOn(Events.MessageCreate, async (message) => {
+    if (message.guildId !== guildId) return;
+    await audit.publish({
+      actor: { id: message.author.id, kind: "user" },
+      category: "messages",
+      discord: false,
+      eventType: "message.created",
+      payload: messagePayload(message),
+      subject: {
+        channelId: message.channelId,
+        id: message.id,
+        kind: "message",
+      },
+      summary: "Сообщение сохранено в полном журнале.",
+      title: "Создано сообщение",
+    });
+    await inspectAutomodMessage(message, `message:${message.id}:created`);
   });
 
   safeOn(Events.MessageUpdate, async (before, after) => {
     if (after.guildId !== guildId) return;
+    const archivedBefore = await options.messageArchiveReader?.findLatest(
+      guildId,
+      after.id,
+    );
+    const current = after.partial ? await after.fetch() : after;
+    const beforeContent = before.content ?? archivedBefore?.content ?? null;
     if (
-      before.content === after.content &&
-      before.attachments.size === after.attachments.size
+      beforeContent === current.content &&
+      before.attachments.size === current.attachments.size
     ) {
       return;
     }
     await audit.publish({
-      actor: { id: after.author.id, kind: "user" },
+      actor: { id: current.author.id, kind: "user" },
       category: "messages",
       discord: true,
       eventType: "message.updated",
       payload: {
-        after: messagePayload(after),
-        before: messagePayload(before),
+        after: messagePayload(current),
+        before: {
+          ...messagePayload(before),
+          content: beforeContent,
+        },
       },
       subject: {
-        channelId: after.channelId,
-        id: after.id,
+        channelId: current.channelId,
+        id: current.id,
         kind: "message",
       },
       summary: [
-        `Сообщение изменено в <#${after.channelId}>.`,
-        `До: ${messageExcerpt(before.content)}`,
-        `После: ${messageExcerpt(after.content)}`,
+        `Сообщение изменено в <#${current.channelId}>.`,
+        `До: ${messageExcerpt(beforeContent)}`,
+        `После: ${messageExcerpt(current.content)}`,
       ].join("\n"),
       title: "Сообщение изменено",
     });
+    await inspectAutomodMessage(
+      current,
+      `message:${current.id}:edited:${current.editedTimestamp ?? current.createdTimestamp}`,
+    );
   });
 
   safeOn(Events.MessageDelete, async (message) => {
@@ -676,26 +734,44 @@ export async function startGuildCore(
     const managedInviteRule = discordAutomod.isManagedInviteRule(
       execution.ruleId,
     );
+    const inviteMode = automodRuntime.config.mode;
+    const primaryExecutionType =
+      inviteMode !== "enforce" ||
+      inviteAction === "observe" ||
+      inviteAction === "points"
+        ? AutoModerationActionType.SendAlertMessage
+        : AutoModerationActionType.BlockMessage;
     if (
       managedInviteRule &&
       automodRuntime.config.enabled &&
-      automodRuntime.config.mode === "enforce" &&
-      ["ban", "kick", "quarantine"].includes(inviteAction)
+      execution.action.type === primaryExecutionType &&
+      moderationModule &&
+      inviteMode !== "observe" &&
+      (inviteMode === "enforce" || inviteAction === "points")
     ) {
       const member = await guild.members.fetch(execution.userId);
-      const reason = `fxvrlxss_ Discord invite automod: ${inviteAction}`;
-      if (inviteAction === "quarantine") {
-        await member.roles.add(resources.roles.quarantine, reason);
-      } else if (inviteAction === "kick") {
-        await member.kick(reason);
-      } else if (inviteAction === "ban") {
-        await member.ban({ reason });
-      }
+      if (isMemberAutomodExempt(member, automodRuntime)) return;
+      await moderationModule.applyAutomodViolation({
+        action: inviteMode === "points" ? "points" : inviteAction,
+        applyThresholds: inviteMode === "enforce",
+        channelId: execution.channelId ?? resources.channels.logs.security,
+        messageId: execution.messageId ?? null,
+        points:
+          inviteAction === "points"
+            ? automodRuntime.config.inviteLinks.points
+            : 0,
+        signals: ["invite-links"],
+        sourceEventKey: `discord-automod:${execution.ruleId}:${execution.messageId ?? execution.alertSystemMessageId ?? `${execution.userId}:${execution.matchedContent ?? "unknown"}`}`,
+        summary: "стороннее приглашение Discord",
+        timeoutMinutes: automodRuntime.config.inviteLinks.timeoutMinutes,
+        userId: execution.userId,
+      });
     }
     await audit.publish({
       actor: { id: execution.userId, kind: "user" },
-      category: "moderation",
-      discord: true,
+      category: managedInviteRule ? "security" : "moderation",
+      discord:
+        !managedInviteRule || execution.action.type === primaryExecutionType,
       eventType: "discord_automod.executed",
       payload: {
         actionType: execution.action.type,
@@ -1012,6 +1088,7 @@ export async function startGuildCore(
       await voicePublicationWorker?.stop();
       await ticketPublicationWorker?.stop();
       await moderationPublicationWorker?.stop();
+      await moderationSystemPublicationWorker?.stop();
       await voiceModule?.stop();
       await ticketModule?.stop();
       await moderationModule?.stop();

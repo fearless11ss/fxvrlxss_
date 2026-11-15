@@ -1,10 +1,9 @@
 "use client";
 
 import type { AutomodConfig } from "@fxvrlxss/domain/automod-config";
-import { useActionState, useState } from "react";
+import { useState } from "react";
 
 import { ResourcePicker } from "../resource-picker";
-import { saveAutomodDraft, type SaveAutomodState } from "./actions";
 
 type AutomodAction = AutomodConfig["flood"]["action"];
 
@@ -19,9 +18,9 @@ interface AutomodResourceOptions {
   readonly roles: readonly AutomodResourceOption[];
 }
 
-const initialState: SaveAutomodState = {};
 const actions = [
   ["observe", "Только наблюдать"],
+  ["points", "Добавить баллы"],
   ["delete", "Удалить сообщение"],
   ["timeout", "Выдать тайм-аут"],
   ["quarantine", "Отправить в карантин"],
@@ -31,11 +30,15 @@ const actions = [
 
 function ActionSelect({
   name,
+  points,
+  pointsName,
   timeoutMinutes,
   timeoutName,
   value,
 }: Readonly<{
   name: string;
+  points: number;
+  pointsName: string;
   timeoutMinutes: number;
   timeoutName: string;
   value: AutomodAction;
@@ -59,6 +62,18 @@ function ActionSelect({
           ))}
         </select>
       </label>
+      {selected === "points" ? (
+        <label>
+          <span>Количество баллов</span>
+          <input
+            defaultValue={points}
+            max="100"
+            min="1"
+            name={pointsName}
+            type="number"
+          />
+        </label>
+      ) : null}
       {selected === "timeout" ? (
         <label>
           <span>Срок тайм-аута, минут</span>
@@ -80,19 +95,15 @@ function ActionSelect({
   );
 }
 
-export function AutomodForm({
+export function AutomodFields({
   config,
   resources,
 }: Readonly<{
   config: AutomodConfig;
   resources: AutomodResourceOptions;
 }>) {
-  const [state, action, pending] = useActionState(
-    saveAutomodDraft,
-    initialState,
-  );
   return (
-    <form action={action} className="automodForm">
+    <div className="automodForm">
       <section className="automodMaster" aria-label="Состояние модуля">
         <div>
           <label className="switchLine">
@@ -109,6 +120,7 @@ export function AutomodForm({
           <span>Рабочий режим</span>
           <select defaultValue={config.mode} name="mode">
             <option value="observe">Наблюдение без наказаний</option>
+            <option value="points">Только начисление баллов</option>
             <option value="enforce">Применение наказаний</option>
           </select>
         </label>
@@ -150,6 +162,8 @@ export function AutomodForm({
             </label>
             <ActionSelect
               name="floodAction"
+              points={config.flood.points}
+              pointsName="floodPoints"
               timeoutMinutes={config.flood.timeoutMinutes}
               timeoutName="floodTimeoutMinutes"
               value={config.flood.action}
@@ -192,6 +206,8 @@ export function AutomodForm({
             </label>
             <ActionSelect
               name="repeatedAction"
+              points={config.repeatedMessages.points}
+              pointsName="repeatedPoints"
               timeoutMinutes={config.repeatedMessages.timeoutMinutes}
               timeoutName="repeatedTimeoutMinutes"
               value={config.repeatedMessages.action}
@@ -234,6 +250,8 @@ export function AutomodForm({
             </label>
             <ActionSelect
               name="capsAction"
+              points={config.caps.points}
+              pointsName="capsPoints"
               timeoutMinutes={config.caps.timeoutMinutes}
               timeoutName="capsTimeoutMinutes"
               value={config.caps.action}
@@ -266,6 +284,8 @@ export function AutomodForm({
             </label>
             <ActionSelect
               name="emojiAction"
+              points={config.emojiSpam.points}
+              pointsName="emojiPoints"
               timeoutMinutes={config.emojiSpam.timeoutMinutes}
               timeoutName="emojiTimeoutMinutes"
               value={config.emojiSpam.action}
@@ -291,6 +311,8 @@ export function AutomodForm({
             </p>
             <ActionSelect
               name="inviteAction"
+              points={config.inviteLinks.points}
+              pointsName="invitePoints"
               timeoutMinutes={config.inviteLinks.timeoutMinutes}
               timeoutName="inviteTimeoutMinutes"
               value={config.inviteLinks.action}
@@ -359,6 +381,8 @@ export function AutomodForm({
             </label>
             <ActionSelect
               name="attachmentAction"
+              points={config.attachmentPolicy.points}
+              pointsName="attachmentPoints"
               timeoutMinutes={config.attachmentPolicy.timeoutMinutes}
               timeoutName="attachmentTimeoutMinutes"
               value={config.attachmentPolicy.action}
@@ -394,6 +418,8 @@ export function AutomodForm({
             </label>
             <ActionSelect
               name="messageLengthAction"
+              points={config.messageLength.points}
+              pointsName="messageLengthPoints"
               timeoutMinutes={config.messageLength.timeoutMinutes}
               timeoutName="messageLengthTimeoutMinutes"
               value={config.messageLength.action}
@@ -420,20 +446,6 @@ export function AutomodForm({
           value={config.exemptChannelIds}
         />
       </section>
-
-      <footer className="formFooter">
-        <div aria-live="polite">
-          {state.error ? (
-            <span className="formError">{state.error}</span>
-          ) : null}
-          {state.message ? (
-            <span className="formSuccess">{state.message}</span>
-          ) : null}
-        </div>
-        <button disabled={pending} type="submit">
-          {pending ? "Сохранение…" : "Сохранить черновик"}
-        </button>
-      </footer>
-    </form>
+    </div>
   );
 }

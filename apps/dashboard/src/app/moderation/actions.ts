@@ -1,7 +1,7 @@
 "use server";
 
 import { auditEvents, configurationVersions } from "@fxvrlxss/database/schema";
-import { moderationConfigSchema } from "@fxvrlxss/domain/moderation-config";
+import { moderationSystemConfigSchema } from "@fxvrlxss/domain/moderation-system-config";
 import { and, eq, max } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -9,6 +9,8 @@ import { z } from "zod";
 import { requireOwnerSession } from "../../lib/auth";
 import { getDatabase } from "../../lib/database";
 import { getDashboardEnvironment } from "../../lib/environment";
+
+const MODULE = "moderation-system";
 
 export interface ModerationActionState {
   readonly error?: string;
@@ -19,42 +21,129 @@ function enabled(formData: FormData, name: string): boolean {
   return formData.get(name) === "on";
 }
 
+function numberValue(formData: FormData, name: string): number {
+  return Number(formData.get(name));
+}
+
+function optionalNumberValue(
+  formData: FormData,
+  name: string,
+): number | undefined {
+  const value = formData.get(name);
+  return typeof value === "string" && value.length > 0
+    ? Number(value)
+    : undefined;
+}
+
+function idList(formData: FormData, name: string): string[] {
+  return formData
+    .getAll(name)
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
 export async function saveModerationDraft(
   _state: ModerationActionState,
   formData: FormData,
 ): Promise<ModerationActionState> {
   const session = await requireOwnerSession();
-  const parsed = moderationConfigSchema.safeParse({
-    actionPoints: {
-      ban: Number(formData.get("points-ban")),
-      kick: Number(formData.get("points-kick")),
-      timeout: Number(formData.get("points-timeout")),
-      warn: Number(formData.get("points-warn")),
+  const parsed = moderationSystemConfigSchema.safeParse({
+    automod: {
+      attachmentPolicy: {
+        action: formData.get("attachmentAction"),
+        allowGif: enabled(formData, "allowGif"),
+        allowImages: enabled(formData, "allowImages"),
+        allowVideo: enabled(formData, "allowVideo"),
+        enabled: enabled(formData, "attachmentEnabled"),
+        maximumPerWindow: numberValue(formData, "attachmentMaximumPerWindow"),
+        points: optionalNumberValue(formData, "attachmentPoints"),
+        timeoutMinutes: optionalNumberValue(
+          formData,
+          "attachmentTimeoutMinutes",
+        ),
+        windowSeconds: numberValue(formData, "attachmentWindowSeconds"),
+      },
+      caps: {
+        action: formData.get("capsAction"),
+        enabled: enabled(formData, "capsEnabled"),
+        minimumLetters: numberValue(formData, "capsMinimumLetters"),
+        points: optionalNumberValue(formData, "capsPoints"),
+        ratio: numberValue(formData, "capsRatio") / 100,
+        timeoutMinutes: optionalNumberValue(formData, "capsTimeoutMinutes"),
+      },
+      emojiSpam: {
+        action: formData.get("emojiAction"),
+        enabled: enabled(formData, "emojiEnabled"),
+        maximum: numberValue(formData, "emojiMaximum"),
+        points: optionalNumberValue(formData, "emojiPoints"),
+        timeoutMinutes: optionalNumberValue(formData, "emojiTimeoutMinutes"),
+      },
+      enabled: enabled(formData, "enabled"),
+      exemptChannelIds: idList(formData, "exemptChannelIds"),
+      exemptRoleIds: idList(formData, "exemptRoleIds"),
+      flood: {
+        action: formData.get("floodAction"),
+        enabled: enabled(formData, "floodEnabled"),
+        maximumMessages: numberValue(formData, "floodMaximumMessages"),
+        points: optionalNumberValue(formData, "floodPoints"),
+        timeoutMinutes: optionalNumberValue(formData, "floodTimeoutMinutes"),
+        windowSeconds: numberValue(formData, "floodWindowSeconds"),
+      },
+      inviteLinks: {
+        action: formData.get("inviteAction"),
+        enabled: enabled(formData, "inviteEnabled"),
+        points: optionalNumberValue(formData, "invitePoints"),
+        timeoutMinutes: optionalNumberValue(formData, "inviteTimeoutMinutes"),
+      },
+      messageLength: {
+        action: formData.get("messageLengthAction"),
+        enabled: enabled(formData, "messageLengthEnabled"),
+        maximumCharacters: numberValue(formData, "messageLengthMaximum"),
+        points: optionalNumberValue(formData, "messageLengthPoints"),
+        timeoutMinutes: optionalNumberValue(
+          formData,
+          "messageLengthTimeoutMinutes",
+        ),
+      },
+      mode: formData.get("mode"),
+      repeatedMessages: {
+        action: formData.get("repeatedAction"),
+        enabled: enabled(formData, "repeatedEnabled"),
+        maximumRepeats: numberValue(formData, "repeatedMaximumRepeats"),
+        points: optionalNumberValue(formData, "repeatedPoints"),
+        timeoutMinutes: optionalNumberValue(formData, "repeatedTimeoutMinutes"),
+        windowSeconds: numberValue(formData, "repeatedWindowSeconds"),
+      },
     },
-    defaultTimeoutMinutes: Number(formData.get("defaultTimeoutMinutes")),
-    enabled: enabled(formData, "enabled"),
-    pointExpiryDays: Number(formData.get("pointExpiryDays")),
-    staffRoleIds: formData.getAll("staffRoleIds").map(String),
-    thresholds: {
-      ban: {
-        enabled: enabled(formData, "threshold-ban-enabled"),
-        points: Number(formData.get("threshold-ban-points")),
-      },
-      kick: {
-        enabled: enabled(formData, "threshold-kick-enabled"),
-        points: Number(formData.get("threshold-kick-points")),
-      },
-      timeout: {
-        enabled: enabled(formData, "threshold-timeout-enabled"),
-        points: Number(formData.get("threshold-timeout-points")),
-        timeoutMinutes: Number(formData.get("threshold-timeout-minutes")),
+    manual: {
+      defaultTimeoutMinutes: numberValue(
+        formData,
+        "manualDefaultTimeoutMinutes",
+      ),
+      enabled: enabled(formData, "manualEnabled"),
+      pointExpiryDays: numberValue(formData, "manualPointExpiryDays"),
+      staffRoleIds: idList(formData, "manualStaffRoleIds"),
+      thresholds: {
+        ban: {
+          enabled: enabled(formData, "threshold-ban-enabled"),
+          points: numberValue(formData, "threshold-ban-points"),
+        },
+        kick: {
+          enabled: enabled(formData, "threshold-kick-enabled"),
+          points: numberValue(formData, "threshold-kick-points"),
+        },
+        timeout: {
+          enabled: enabled(formData, "threshold-timeout-enabled"),
+          points: numberValue(formData, "threshold-timeout-points"),
+          timeoutMinutes: numberValue(formData, "threshold-timeout-minutes"),
+        },
       },
     },
   });
   if (!parsed.success) {
     return {
-      error:
-        "Проверьте баллы, сроки и порядок порогов. Включённые пороги должны возрастать.",
+      error: "Проверьте флаги, действия, баллы и порядок порогов модерации.",
     };
   }
 
@@ -63,7 +152,7 @@ export async function saveModerationDraft(
   const [current] = await database
     .select({ version: max(configurationVersions.version) })
     .from(configurationVersions)
-    .where(eq(configurationVersions.module, "moderation"));
+    .where(eq(configurationVersions.module, MODULE));
   const nextVersion = Number(current?.version ?? 0) + 1;
   await database.transaction(async (transaction) => {
     await transaction
@@ -71,13 +160,13 @@ export async function saveModerationDraft(
       .set({ status: "superseded", updatedAt: new Date() })
       .where(
         and(
-          eq(configurationVersions.module, "moderation"),
+          eq(configurationVersions.module, MODULE),
           eq(configurationVersions.status, "draft"),
         ),
       );
     await transaction.insert(configurationVersions).values({
       createdBy: session.accountId,
-      module: "moderation",
+      module: MODULE,
       payload: parsed.data,
       status: "draft",
       version: nextVersion,
@@ -86,7 +175,7 @@ export async function saveModerationDraft(
       actorId: session.accountId,
       actorType: "owner",
       category: "bot",
-      eventType: "configuration.moderation_draft_saved",
+      eventType: "configuration.moderation_system_draft_saved",
       guildId: environment.guildId,
       payload: { version: nextVersion },
     });
@@ -114,7 +203,7 @@ export async function publishModerationDraft(
     .from(configurationVersions)
     .where(
       and(
-        eq(configurationVersions.module, "moderation"),
+        eq(configurationVersions.module, MODULE),
         eq(configurationVersions.status, "queued"),
       ),
     )
@@ -129,7 +218,7 @@ export async function publishModerationDraft(
       .set({ failureReason: null, status: "queued", updatedAt: new Date() })
       .where(
         and(
-          eq(configurationVersions.module, "moderation"),
+          eq(configurationVersions.module, MODULE),
           eq(configurationVersions.version, parsedVersion.data),
           eq(configurationVersions.status, "draft"),
         ),
@@ -140,7 +229,7 @@ export async function publishModerationDraft(
       actorId: session.accountId,
       actorType: "owner",
       category: "bot",
-      eventType: "configuration.moderation_queued",
+      eventType: "configuration.moderation_system_queued",
       guildId: environment.guildId,
       payload: { version: parsedVersion.data },
     });

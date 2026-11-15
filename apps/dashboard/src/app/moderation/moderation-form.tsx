@@ -1,44 +1,25 @@
 "use client";
 
 import type { ModerationConfig } from "@fxvrlxss/domain/moderation-config";
-import { useActionState } from "react";
 
 import { ResourcePicker } from "../resource-picker";
-import { saveModerationDraft, type ModerationActionState } from "./actions";
 import type { ModerationRoleOption } from "./data";
 
-const initialState: ModerationActionState = {};
-
-const actionFields = [
-  ["warn", "Предупреждение", "Фиксация нарушения без ограничения доступа."],
-  [
-    "timeout",
-    "Тайм-аут",
-    "Временный запрет отправки сообщений и входа в войс.",
-  ],
-  ["kick", "Кик", "Незамедлительное исключение с сервера."],
-  ["ban", "Бан", "Полная блокировка участника на сервере."],
-] as const;
-
-export function ModerationForm({
+export function ModerationFields({
   config,
   roles,
 }: Readonly<{
   config: ModerationConfig;
   roles: readonly ModerationRoleOption[];
 }>) {
-  const [state, action, pending] = useActionState(
-    saveModerationDraft,
-    initialState,
-  );
   return (
-    <form action={action} className="voiceForm moderationForm">
+    <div className="voiceForm moderationForm">
       <section className="automodMaster" aria-label="Состояние модуля">
         <div>
           <label className="switchLine">
             <input
               defaultChecked={config.enabled}
-              name="enabled"
+              name="manualEnabled"
               type="checkbox"
             />
             <span>Модуль включён</span>
@@ -49,7 +30,7 @@ export function ModerationForm({
           emptyMessage="Роли ещё не синхронизированы с Discord."
           kind="role"
           label="Роли с доступом к ручной модерации"
-          name="staffRoleIds"
+          name="manualStaffRoleIds"
           options={roles}
           value={config.staffRoleIds}
         />
@@ -67,7 +48,7 @@ export function ModerationForm({
               defaultValue={config.pointExpiryDays}
               max="3650"
               min="1"
-              name="pointExpiryDays"
+              name="manualPointExpiryDays"
               type="number"
             />
           </label>
@@ -77,7 +58,7 @@ export function ModerationForm({
               defaultValue={config.defaultTimeoutMinutes}
               max="40320"
               min="1"
-              name="defaultTimeoutMinutes"
+              name="manualDefaultTimeoutMinutes"
               type="number"
             />
           </label>
@@ -86,29 +67,13 @@ export function ModerationForm({
 
       <section className="voiceControls" aria-labelledby="moderation-actions">
         <header className="sectionHeader">
-          <p className="sectionPath">Нарушения</p>
-          <h2 id="moderation-actions">Баллы за действие</h2>
+          <p className="sectionPath">Ручные решения</p>
+          <h2 id="moderation-actions">Предупреждения и наказания</h2>
         </header>
-        <div className="voiceControlLedger moderationLedger">
-          {actionFields.map(([key, label, description], index) => (
-            <label className="voiceControlRow moderationPointRow" key={key}>
-              <span className="voiceControlIndex">
-                {String(index + 1).padStart(2, "0")}
-              </span>
-              <span>
-                <strong>{label}</strong>
-                <small>{description}</small>
-              </span>
-              <input
-                defaultValue={config.actionPoints[key]}
-                max="100"
-                min="0"
-                name={`points-${key}`}
-                type="number"
-              />
-            </label>
-          ))}
-        </div>
+        <p className="ruleDescription">
+          Предупреждение всегда начисляет 1 балл. Тайм-аут, кик и бан создают
+          дело без баллов и применяются по решению сотрудника.
+        </p>
       </section>
 
       <section
@@ -172,20 +137,6 @@ export function ModerationForm({
           ))}
         </div>
       </section>
-
-      <footer className="formFooter">
-        <div aria-live="polite">
-          {state.error ? (
-            <span className="formError">{state.error}</span>
-          ) : null}
-          {state.message ? (
-            <span className="formSuccess">{state.message}</span>
-          ) : null}
-        </div>
-        <button disabled={pending} type="submit">
-          {pending ? "Сохранение…" : "Сохранить черновик"}
-        </button>
-      </footer>
-    </form>
+    </div>
   );
 }

@@ -96,6 +96,7 @@ interface TimedMessage {
   readonly attachmentCount: number;
   readonly content: string;
   readonly createdAt: number;
+  readonly id: string;
 }
 
 const emojiPattern = /\p{Extended_Pictographic}/gu;
@@ -204,12 +205,13 @@ export class CustomModerationEngine {
     );
     const cutoff = message.createdAt - maximumWindow;
     const previous = (this.#history.get(message.userId) ?? []).filter(
-      ({ createdAt }) => createdAt >= cutoff,
+      ({ createdAt, id }) => createdAt >= cutoff && id !== message.id,
     );
     const current: TimedMessage = {
       attachmentCount: message.attachments.length,
       content: normalizedContent,
       createdAt: message.createdAt,
+      id: message.id,
     };
     const history = [...previous, current];
     this.#history.set(message.userId, history);

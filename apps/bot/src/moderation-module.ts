@@ -23,6 +23,7 @@ import {
   type Guild,
   type GuildMember,
   type Interaction,
+  type Message,
 } from "discord.js";
 import type { Logger } from "pino";
 
@@ -44,6 +45,52 @@ const actionLabels: Readonly<Record<ModerationAction, string>> = {
   timeout: "Тайм-аут",
   warn: "Предупреждение",
 };
+
+export type AutomatedModerationAction =
+  "observe" | "points" | "delete" | "timeout" | "quarantine" | "kick" | "ban";
+
+export interface AutomodViolationInput {
+  readonly action: AutomatedModerationAction;
+  readonly applyThresholds: boolean;
+  readonly channelId: string;
+  readonly message?: Message;
+  readonly messageId: string | null;
+  readonly points: number;
+  readonly signals: readonly string[];
+  readonly sourceEventKey: string;
+  readonly summary: string;
+  readonly timeoutMinutes: number;
+  readonly userId: string;
+}
+
+export interface AutomodViolationResult {
+  readonly activePoints: number;
+  readonly appliedAction: string;
+  readonly caseNumber: number | null;
+}
+
+const automatedActionLabels: Readonly<
+  Record<AutomatedModerationAction, string>
+> = {
+  ban: "бан",
+  delete: "удаление сообщения",
+  kick: "кик",
+  observe: "наблюдение",
+  points: "начисление баллов",
+  quarantine: "карантин",
+  timeout: "тайм-аут",
+};
+
+function caseActionLabel(item: ModerationCaseRecord): string {
+  if (
+    item.evidence.source === "automod" &&
+    item.evidence.automodAction &&
+    item.evidence.automodAction in automatedActionLabels
+  ) {
+    return `Автомод · ${automatedActionLabels[item.evidence.automodAction as AutomatedModerationAction]}`;
+  }
+  return actionLabels[item.appliedAction];
+}
 
 function caseNumber(value: number): string {
   return String(value).padStart(4, "0");
@@ -78,7 +125,7 @@ export function buildModerationCard(input: {
             `Участник: <@${input.userId}>`,
             `Активные баллы: **${input.activePoints}**`,
             latest
-              ? `Последнее дело: **#${caseNumber(latest.number)}** · ${actionLabels[latest.appliedAction]}`
+              ? `Последнее дело: **#${caseNumber(latest.number)}** · ${caseActionLabel(latest)}`
               : "История наказаний пуста.",
           ].join("\n"),
         ),
@@ -110,7 +157,7 @@ function buildModerationHistory(input: {
         : item.status === "appealed"
           ? "обжалуется"
           : "активно";
-    return `**#${caseNumber(item.number)}** · ${actionLabels[item.appliedAction]} · ${item.points} б. · ${state} · <t:${Math.floor(item.createdAt.getTime() / 1_000)}:f>`;
+    return `**#${caseNumber(item.number)}** · ${caseActionLabel(item)} · ${item.points} б. · ${state} · <t:${Math.floor(item.createdAt.getTime() / 1_000)}:f>`;
   });
   const container = new ContainerBuilder()
     .setAccentColor(0xf2f2ef)
@@ -231,8 +278,10 @@ export class ModerationModule
   implements ModerationConfigurationApplier, ModerationAppealHandler
 {
   readonly #audit: AuditBus;
+  readonly #automodQueues = new Map<string, Promise<void>>();
   readonly #guild: Guild;
   readonly #logger: Logger;
+  readonly #quarantineRoleId: string;
   readonly #repository: ModerationRepository;
   #config: ModerationConfig;
 
@@ -240,11 +289,13 @@ export class ModerationModule
     readonly audit: AuditBus;
     readonly guild: Guild;
     readonly logger: Logger;
+    readonly quarantineRoleId: string;
     readonly repository: ModerationRepository;
   }) {
     this.#audit = options.audit;
     this.#guild = options.guild;
     this.#logger = options.logger;
+    this.#quarantineRoleId = options.quarantineRoleId;
     this.#repository = options.repository;
     this.#config = {
       ...defaultModerationConfig,
@@ -262,13 +313,200 @@ export class ModerationModule
     await registerModerationCommand(this.#guild);
   }
 
-  stop(): Promise<void> {
-    return Promise.resolve();
+  async stop(): Promise<void> {
+    await Promise.allSettled([...this.#automodQueues.values()]);
   }
 
   apply(config: ModerationConfig): Promise<void> {
     this.#config = moderationConfigSchema.parse(config);
     return Promise.resolve();
+  }
+
+  applyAutomodViolation(
+    input: AutomodViolationInput,
+  ): Promise<AutomodViolationResult> {
+    const previous = this.#automodQueues.get(input.userId) ?? Promise.resolve();
+    const operation = previous.then(
+      () => this.#applyAutomodViolation(input),
+      () => this.#applyAutomodViolation(input),
+    );
+    const tail = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.#automodQueues.set(input.userId, tail);
+    void tail.finally(() => {
+      if (this.#automodQueues.get(input.userId) === tail) {
+        this.#automodQueues.delete(input.userId);
+      }
+    });
+    return operation;
+  }
+
+  async #applyAutomodViolation(
+    input: AutomodViolationInput,
+  ): Promise<AutomodViolationResult> {
+    const previousPoints = await this.#repository.activePoints(
+      this.#guild.id,
+      input.userId,
+      new Date(),
+    );
+    const activePoints = previousPoints + input.points;
+    const requestedAction: ModerationAction =
+      input.action === "timeout" ||
+      input.action === "kick" ||
+      input.action === "ban"
+        ? input.action
+        : "warn";
+    const decision =
+      input.applyThresholds && input.points > 0
+        ? decideModerationAction({
+            activePoints,
+            config: this.#config,
+            requestedAction,
+            ...(requestedAction === "timeout"
+              ? { requestedTimeoutMinutes: input.timeoutMinutes }
+              : {}),
+          })
+        : {
+            action: requestedAction,
+            escalated: false,
+            timeoutMinutes:
+              requestedAction === "timeout" ? input.timeoutMinutes : null,
+          };
+    const tracked =
+      input.points > 0 ||
+      ["timeout", "quarantine", "kick", "ban"].includes(input.action);
+    let item: ModerationCaseRecord | undefined;
+    if (tracked) {
+      const creation = await this.#repository.create({
+        appliedAction: decision.action,
+        evidence: {
+          automodAction: input.action,
+          channelId: input.channelId,
+          ...(input.messageId ? { messageId: input.messageId } : {}),
+          reference: input.messageId
+            ? `https://discord.com/channels/${this.#guild.id}/${input.channelId}/${input.messageId}`
+            : null,
+          signals: input.signals,
+          source: "automod",
+        },
+        expiresAt: new Date(
+          Date.now() + this.#config.pointExpiryDays * 86_400_000,
+        ),
+        guildId: this.#guild.id,
+        moderatorId: this.#guild.client.user.id,
+        points: input.points,
+        requestedAction,
+        sourceEventKey: input.sourceEventKey,
+        summary: input.summary,
+        timeoutMinutes: decision.timeoutMinutes,
+        userId: input.userId,
+      });
+      item = creation.record;
+      if (!creation.created) {
+        return {
+          activePoints: previousPoints,
+          appliedAction: caseActionLabel(item),
+          caseNumber: item.number,
+        };
+      }
+    }
+
+    const appliedAction =
+      decision.action !== "warn"
+        ? actionLabels[decision.action]
+        : automatedActionLabels[input.action];
+    await this.#notifyAutomodMember({
+      activePoints,
+      appliedAction,
+      caseNumber: item?.number ?? null,
+      channelId: input.channelId,
+      points: input.points,
+      summary: input.summary,
+      userId: input.userId,
+    });
+
+    try {
+      const target =
+        input.action === "quarantine" || decision.action !== "warn"
+          ? await this.#guild.members.fetch(input.userId)
+          : undefined;
+      if (input.message && !["observe", "points"].includes(input.action)) {
+        if (!input.message.deletable) {
+          throw new Error("Сообщение нельзя удалить");
+        }
+        await input.message.delete();
+      }
+      if (
+        input.action === "quarantine" &&
+        decision.action !== "kick" &&
+        decision.action !== "ban"
+      ) {
+        if (!target) throw new Error("Участник не найден");
+        if (!target.manageable) {
+          throw new Error("Участнику нельзя назначить карантин");
+        }
+        await target.roles.add(
+          this.#quarantineRoleId,
+          `fxvrlxss_ automod: ${input.summary}`.slice(0, 500),
+        );
+      }
+      if (decision.action !== "warn") {
+        if (!target) throw new Error("Участник не найден");
+        await this.#applyDiscordAction(
+          target,
+          decision.action,
+          input.summary,
+          decision.timeoutMinutes,
+        );
+      }
+    } catch (error) {
+      if (item) {
+        await this.#repository.resolve({
+          guildId: this.#guild.id,
+          number: item.number,
+          reason: `Действие автомода не применено: ${error instanceof Error ? error.message : String(error)}`,
+          resolvedById: this.#guild.client.user.id,
+        });
+      }
+      throw error;
+    }
+
+    if (item) {
+      await this.#audit.publish({
+        actor: { id: this.#guild.client.user.id, kind: "user" },
+        category: "moderation",
+        discord: true,
+        eventType: "moderation.automod_case_created",
+        payload: {
+          action: input.action,
+          activePoints,
+          appliedAction: decision.action,
+          points: input.points,
+          signals: input.signals,
+        },
+        severity:
+          decision.action === "ban" || decision.action === "kick"
+            ? "warning"
+            : "info",
+        subject: { id: input.userId, kind: "user" },
+        summary: [
+          `Дело: **#${caseNumber(item.number)}** · источник: автомод`,
+          `Участник: <@${input.userId}>`,
+          `Флаги: ${input.signals.join(", ")}`,
+          `Действие: **${appliedAction}**`,
+          `Баллы: +${input.points} · активно ${activePoints}`,
+          `Причина: ${escapeMarkdown(input.summary)}`,
+        ].join("\n"),
+        title: `Автомод · дело #${caseNumber(item.number)}`,
+      });
+    }
+    return {
+      activePoints,
+      appliedAction,
+      caseNumber: item?.number ?? null,
+    };
   }
 
   async canAppeal(number: number, userId: string): Promise<boolean> {
@@ -487,37 +725,47 @@ export class ModerationModule
     }
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-    const points = this.#config.actionPoints[requestedAction];
+    const points = requestedAction === "warn" ? 1 : 0;
     const previousPoints = await this.#repository.activePoints(
       this.#guild.id,
       userId,
       new Date(),
     );
     const activePoints = previousPoints + points;
-    const decision = decideModerationAction({
-      activePoints,
-      config: this.#config,
-      requestedAction,
-      ...(requestedTimeoutMinutes === undefined
-        ? {}
-        : { requestedTimeoutMinutes }),
-    });
+    const decision =
+      requestedAction === "warn"
+        ? decideModerationAction({
+            activePoints,
+            config: this.#config,
+            requestedAction,
+          })
+        : {
+            action: requestedAction,
+            escalated: false,
+            timeoutMinutes:
+              requestedAction === "timeout"
+                ? (requestedTimeoutMinutes ??
+                  this.#config.defaultTimeoutMinutes)
+                : null,
+          };
     let item: ModerationCaseRecord | undefined;
     try {
-      item = await this.#repository.create({
-        appliedAction: decision.action,
-        evidence: { reference: evidence || null },
-        expiresAt: new Date(
-          Date.now() + this.#config.pointExpiryDays * 86_400_000,
-        ),
-        guildId: this.#guild.id,
-        moderatorId: moderator.id,
-        points,
-        requestedAction,
-        summary: reason,
-        timeoutMinutes: decision.timeoutMinutes,
-        userId,
-      });
+      item = (
+        await this.#repository.create({
+          appliedAction: decision.action,
+          evidence: { reference: evidence || null },
+          expiresAt: new Date(
+            Date.now() + this.#config.pointExpiryDays * 86_400_000,
+          ),
+          guildId: this.#guild.id,
+          moderatorId: moderator.id,
+          points,
+          requestedAction,
+          summary: reason,
+          timeoutMinutes: decision.timeoutMinutes,
+          userId,
+        })
+      ).record;
       try {
         await this.#applyDiscordAction(
           target,
@@ -689,6 +937,57 @@ export class ModerationModule
     await target.ban({ deleteMessageSeconds: 0, reason: auditReason });
   }
 
+  async #notifyAutomodMember(input: {
+    readonly activePoints: number;
+    readonly appliedAction: string;
+    readonly caseNumber: number | null;
+    readonly channelId: string;
+    readonly points: number;
+    readonly summary: string;
+    readonly userId: string;
+  }): Promise<void> {
+    const lines = [
+      "Автомодерация зафиксировала нарушение.",
+      `Нарушение: ${input.summary}`,
+      `Действие: ${input.appliedAction}.`,
+      input.points > 0
+        ? `Баллы: +${input.points} · всего ${input.activePoints}.`
+        : undefined,
+      input.caseNumber
+        ? `Дело: #${caseNumber(input.caseNumber)}. Его можно обжаловать через тикеты.`
+        : undefined,
+    ].filter((line): line is string => Boolean(line));
+    const user = await this.#guild.client.users.fetch(input.userId);
+    const delivered = await user
+      .send({ content: lines.join("\n") })
+      .then(() => true)
+      .catch(() => false);
+    if (delivered) return;
+
+    const channel = await this.#guild.channels
+      .fetch(input.channelId)
+      .catch(() => null);
+    if (!channel?.isSendable()) {
+      this.#logger.warn(
+        { channelId: input.channelId, userId: input.userId },
+        "automod member notification could not be delivered",
+      );
+      return;
+    }
+    const notice = await channel
+      .send({
+        allowedMentions: { users: [input.userId] },
+        content: [`<@${input.userId}>`, ...lines].join("\n"),
+      })
+      .catch(() => null);
+    if (!notice) return;
+    const timer = setTimeout(
+      () => void notice.delete().catch(() => undefined),
+      60_000,
+    );
+    timer.unref();
+  }
+
   async #reverseDiscordAction(
     item: ModerationCaseRecord,
     reason: string,
@@ -702,6 +1001,17 @@ export class ModerationModule
         .fetch(item.userId)
         .catch(() => null);
       if (member?.moderatable) await member.timeout(null, reason);
+    }
+    if (
+      item.evidence.source === "automod" &&
+      item.evidence.automodAction === "quarantine"
+    ) {
+      const member = await this.#guild.members
+        .fetch(item.userId)
+        .catch(() => null);
+      if (member?.manageable) {
+        await member.roles.remove(this.#quarantineRoleId, reason);
+      }
     }
   }
 

@@ -10,7 +10,6 @@ export const dynamic = "force-dynamic";
 
 const navigation = [
   ["Обзор", "/"],
-  ["Автомодерация", "/automod"],
   ["Модерация", "/moderation"],
   ["Тикеты", "/tickets"],
   ["Голосовые", "/voice"],

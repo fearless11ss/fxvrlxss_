@@ -891,6 +891,20 @@ textarea:focus-visible {
   padding: 0 0 16px;
 }
 
+.moderationSystemForm {
+  padding-bottom: 16px;
+}
+
+.moderationSystemDivider {
+  margin-top: 56px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--steel);
+}
+
+.moderationSystemDivider:first-child {
+  margin-top: 0;
+}
+
 .automodIntro {
   max-width: 850px;
   padding-bottom: 50px;

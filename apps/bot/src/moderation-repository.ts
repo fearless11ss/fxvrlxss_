@@ -1,7 +1,12 @@
 import type { ModerationAction } from "@fxvrlxss/domain/moderation-config";
 
 export interface ModerationEvidence {
+  readonly automodAction?: string;
+  readonly channelId?: string;
+  readonly messageId?: string;
   readonly reference: string | null;
+  readonly signals?: readonly string[];
+  readonly source?: "automod" | "manual";
 }
 
 export interface ModerationCaseRecord {
@@ -22,6 +27,7 @@ export interface ModerationCaseRecord {
   readonly resolutionReason: string | null;
   readonly resolvedAt: Date | null;
   readonly resolvedById: string | null;
+  readonly sourceEventKey: string | null;
   readonly status: "open" | "appealed" | "resolved";
   readonly summary: string;
   readonly timeoutMinutes: number | null;
@@ -43,10 +49,14 @@ export interface ModerationRepository {
     readonly moderatorId: string;
     readonly points: number;
     readonly requestedAction: ModerationAction;
+    readonly sourceEventKey?: string;
     readonly summary: string;
     readonly timeoutMinutes: number | null;
     readonly userId: string;
-  }): Promise<ModerationCaseRecord>;
+  }): Promise<{
+    readonly created: boolean;
+    readonly record: ModerationCaseRecord;
+  }>;
   findByNumber(
     guildId: string,
     number: number,

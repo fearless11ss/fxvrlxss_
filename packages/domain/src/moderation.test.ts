@@ -101,4 +101,19 @@ describe("CustomModerationEngine", () => {
         .findings.map(({ signal }) => signal),
     ).toContain("message-length");
   });
+
+  it("replaces an edited message instead of counting it twice for flood", () => {
+    const engine = new CustomModerationEngine({
+      ...defaultModerationPolicy,
+      flood: { maxMessages: 2, windowMs: 10_000 },
+    });
+
+    engine.inspect(message(1, { content: "первая версия" }));
+    const edited = engine.inspect(
+      message(1, { content: "ИЗМЕНЁННАЯ ВЕРСИЯ", createdAt: 2_000 }),
+    );
+
+    expect(edited.findings.map(({ signal }) => signal)).not.toContain("flood");
+    expect(edited.findings.map(({ signal }) => signal)).toContain("caps");
+  });
 });

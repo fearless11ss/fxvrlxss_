@@ -8,6 +8,7 @@ import type { AutomodAction, AutomodDecision } from "./automod-runtime.js";
 
 interface AutomodRule {
   readonly action: AutomodAction;
+  readonly points: number;
   readonly timeoutMinutes: number;
 }
 
@@ -45,6 +46,8 @@ export function automodActionLabel(
       return "кик";
     case "observe":
       return "только наблюдение";
+    case "points":
+      return "начисление баллов";
     case "quarantine":
       return "карантин";
     case "timeout":
@@ -105,6 +108,25 @@ function findingEvidence(
   }
 }
 
+export function automodSignalLabel(signal: CustomModerationSignal): string {
+  switch (signal) {
+    case "attachment-rate":
+      return "частота вложений";
+    case "attachment-type":
+      return "запрещённый тип вложения";
+    case "caps":
+      return "заглавные буквы";
+    case "emoji-spam":
+      return "emoji-спам";
+    case "flood":
+      return "флуд";
+    case "message-length":
+      return "длина сообщения";
+    case "repeated-message":
+      return "повторы";
+  }
+}
+
 export function buildAutomodLogSummary(
   config: AutomodConfig,
   decision: AutomodDecision,
@@ -113,17 +135,22 @@ export function buildAutomodLogSummary(
   const findings = decision.findings.map((finding) => {
     const { evidence, label } = findingEvidence(finding, config);
     const rule = ruleFor(config, finding.signal);
-    return `• ${label}: ${evidence}. Настройка: ${automodActionLabel(rule.action, rule.timeoutMinutes)}.`;
+    return `• ${label}: ${evidence}. Настройка: ${automodActionLabel(rule.action, rule.timeoutMinutes)}${rule.action === "points" ? ` · +${rule.points} б.` : ""}.`;
   });
   const result =
     config.mode === "observe"
       ? "наказание не применялось (режим наблюдения)."
-      : `решение автомода — ${automodActionLabel(decision.action, decision.timeoutMinutes)}.`;
+      : config.mode === "points"
+        ? "прямые действия отключены (режим только баллов)."
+        : decision.action === "observe" && decision.points > 0
+          ? "решение автомода — начисление баллов."
+          : `решение автомода — ${automodActionLabel(decision.action, decision.timeoutMinutes)}.`;
 
   return [
     `Канал: <#${channelId}>`,
     `Сработало правил: ${decision.findings.length}.`,
     ...findings,
+    `Баллы: ${config.mode !== "observe" && decision.points > 0 ? `+${decision.points}` : "не начислены"}.`,
     `Итог: ${result}`,
   ].join("\n");
 }

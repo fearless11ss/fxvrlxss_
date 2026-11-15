@@ -16,12 +16,6 @@ const thresholdSchema = z.object({
 
 export const moderationConfigSchema = z
   .object({
-    actionPoints: z.object({
-      ban: z.number().int().min(0).max(100),
-      kick: z.number().int().min(0).max(100),
-      timeout: z.number().int().min(0).max(100),
-      warn: z.number().int().min(0).max(100),
-    }),
     defaultTimeoutMinutes: z.number().int().min(1).max(40_320),
     enabled: z.boolean(),
     pointExpiryDays: z.number().int().min(1).max(3_650),
@@ -55,12 +49,6 @@ export const moderationConfigSchema = z
 export type ModerationConfig = z.infer<typeof moderationConfigSchema>;
 
 export const defaultModerationConfig: ModerationConfig = {
-  actionPoints: {
-    ban: 6,
-    kick: 4,
-    timeout: 2,
-    warn: 1,
-  },
   defaultTimeoutMinutes: 60,
   enabled: true,
   pointExpiryDays: 90,

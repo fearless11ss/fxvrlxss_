@@ -22,10 +22,12 @@ describe("automod Discord log summary", () => {
       },
       {
         action: "observe",
+        configuredAction: "timeout",
         findings: [
           { details: { messages: 7 }, signal: "flood" },
           { details: { repeats: 7 }, signal: "repeated-message" },
         ],
+        points: 0,
         timeoutMinutes: 120,
       },
       "channel-1",

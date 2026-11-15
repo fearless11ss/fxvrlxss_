@@ -20,8 +20,24 @@ function record(
     appealResolvedById: row.appealResolvedById,
     createdAt: row.createdAt,
     evidence: {
+      ...(typeof evidence.automodAction === "string"
+        ? { automodAction: evidence.automodAction }
+        : {}),
+      ...(typeof evidence.channelId === "string"
+        ? { channelId: evidence.channelId }
+        : {}),
+      ...(typeof evidence.messageId === "string"
+        ? { messageId: evidence.messageId }
+        : {}),
       reference:
         typeof evidence.reference === "string" ? evidence.reference : null,
+      ...(Array.isArray(evidence.signals) &&
+      evidence.signals.every((signal) => typeof signal === "string")
+        ? { signals: evidence.signals }
+        : {}),
+      ...(evidence.source === "automod" || evidence.source === "manual"
+        ? { source: evidence.source }
+        : {}),
     },
     expiresAt: row.expiresAt,
     guildId: row.guildId,
@@ -33,6 +49,7 @@ function record(
     resolutionReason: row.resolutionReason,
     resolvedAt: row.resolvedAt,
     resolvedById: row.resolvedById,
+    sourceEventKey: row.sourceEventKey,
     status: row.status,
     summary: row.summary,
     timeoutMinutes: row.timeoutMinutes,
@@ -90,7 +107,7 @@ export class DatabaseModerationRepository implements ModerationRepository {
 
   async create(
     input: Parameters<ModerationRepository["create"]>[0],
-  ): Promise<ModerationCaseRecord> {
+  ): ReturnType<ModerationRepository["create"]> {
     const [created] = await this.#database
       .insert(moderationCases)
       .values({
@@ -101,13 +118,31 @@ export class DatabaseModerationRepository implements ModerationRepository {
         moderatorId: input.moderatorId,
         points: input.points,
         requestedAction: input.requestedAction,
+        ...(input.sourceEventKey
+          ? { sourceEventKey: input.sourceEventKey }
+          : {}),
         summary: input.summary,
         timeoutMinutes: input.timeoutMinutes,
         userId: input.userId,
       })
+      .onConflictDoNothing()
       .returning();
-    if (!created) throw new Error("Moderation case was not returned");
-    return record(created);
+    if (created) return { created: true, record: record(created) };
+    if (!input.sourceEventKey) {
+      throw new Error("Moderation case was not returned");
+    }
+    const [existing] = await this.#database
+      .select()
+      .from(moderationCases)
+      .where(
+        and(
+          eq(moderationCases.guildId, input.guildId),
+          eq(moderationCases.sourceEventKey, input.sourceEventKey),
+        ),
+      )
+      .limit(1);
+    if (!existing) throw new Error("Moderation case conflict was not found");
+    return { created: false, record: record(existing) };
   }
 
   async findByNumber(

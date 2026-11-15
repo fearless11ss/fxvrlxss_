@@ -9,69 +9,59 @@ status: accepted
 
 # Automoderation module
 
-Detection ownership is intentionally non-overlapping.
+Automod and manual moderation share one configuration publication, case
+ledger, points total, escalation policy, notification path, and appeal flow.
+Detection remains split between Discord-native rules and the bot runtime.
 
-## Discord-native detection
+## Detection
 
-- Discord invite patterns (implemented);
-- keyword and regex rules (planned);
-- mention spam and mention raids;
-- generic spam filter;
-- member profile terms;
-- Discord suspicious-link protection.
+Discord AutoMod owns invitation patterns. The bot owns flood, repeated
+messages, capital letters, emoji spam, message length, attachment frequency,
+MIME type, and extension checks. Both new and edited messages are inspected.
+An edit replaces the earlier version in rate windows, so it does not count as
+an additional message for flood.
 
-The dashboard publishes these rules through Discord's AutoMod endpoints. The
-bot listens for execution events to apply points, additional sanctions, audit,
-and appeal links.
+## Rule actions
 
-## Bot detection
+Each rule selects exactly one direct action: observe, add points, delete,
+timeout, quarantine, kick, or ban. Point quantity is shown only for the
+add-points action.
 
-- message-rate flood;
-- repeated messages;
-- excessive capital letters;
-- emoji spam;
-- excessive message length;
-- attachment frequency, MIME type, and file extension;
-- join-rate raids and quarantine.
+The global modes are:
+
+- observation: log findings without cases, points, or actions;
+- points: run only add-points rules, without direct or threshold sanctions;
+- full: execute configured direct actions and threshold escalation.
+
+When multiple rules match one message, the strictest direct action wins and
+only the largest point value is added. All findings remain visible in evidence.
+One source event creates at most one case; durable event keys prevent duplicate
+Discord delivery from awarding it twice.
+
+There is no incident cooldown. Every subsequent violating message or edited
+version may create another case. Per-member processing is ordered, so the first
+notification is delivered before the next queued violation is handled.
+
+## Cases and notifications
+
+Point awards, timeouts, quarantine, kicks, and bans create appealable cases. A
+plain deletion with no points creates only an audit event and cannot be
+appealed.
+
+Before an action, the bot sends the member the violation, action, points, total,
+case number, and appeal hint by direct message. If DMs are closed, it mentions
+the member in the source channel without exposing evidence and deletes the
+notice after one minute.
 
 ## Invariants
 
-- One message receives at most one sanction: the strictest decision wins.
-- All matched rules are included in the audit event.
-- Every rule can observe, delete, time out, quarantine, kick, or ban. Kick and
-  ban execute immediately only in enforcement mode.
-- Timeout duration belongs to the individual rule; simultaneous timeout
-  findings use the longest configured duration.
-- New rules support observation mode before enforcement.
-- Ordinary untouched messages are archived only in PostgreSQL. Discord receives
-  message edits, deletions, moderation signals, and other actionable events.
-- Deleted-message logs reference the surviving channel rather than a dead
-  message URL. When Discord emits an uncached partial message, the bot restores
-  its latest text, author, and attachment metadata from the PostgreSQL archive.
-- Dashboard edits create immutable versioned drafts; publishing remains disabled
-  until the owner explicitly submits a draft.
-- Publication moves a draft to `queued`; only the bot, which owns the Discord
-  token, can acknowledge it as `published` after both native and custom rules
-  have been applied. Failures are stored as `failed` with a visible reason.
-- The bot polls at most one queued version at a time. The previously published
-  version becomes `superseded` only after the replacement is applied.
-- Exempt roles and channels are selected by name in the dashboard. The bot
-  synchronizes the guild resource catalog through PostgreSQL, so the dashboard
-  never needs the Discord token. Configuration versions continue to store the
-  selected Discord IDs.
+- Bots, the guild owner, administrators, explicitly exempt roles, and exempt
+  channels bypass checks.
+- Edited-message logs show both the archived old version and current version.
+- Deleted-message evidence remains available in PostgreSQL.
+- One combined dashboard draft publishes native rules and the shared moderation
+  policy together. The Discord token remains in the bot.
+- Detection is logged to `ЛОГИ/безопасность`, cases to `ЛОГИ/модерация`, and
+  operational failures to `ЛОГИ/бот`.
 
-## Current publication mapping
-
-| Dashboard rule       | Enforcement owner |
-| -------------------- | ----------------- |
-| Discord invitations  | Discord AutoMod   |
-| Flood                | Bot runtime       |
-| Repeated messages    | Bot runtime       |
-| Capital letters      | Bot runtime       |
-| Emoji spam           | Bot runtime       |
-| Message length       | Bot runtime       |
-| Attachment type/rate | Bot runtime       |
-
-The global observation mode reports matches without punishment. Enforcement
-mode supports deletion, timeout, quarantine, kick, and ban. Administrator,
-Manage Messages, and explicitly exempted roles/channels bypass custom checks.
+See [the shared moderation module](moderation.md).

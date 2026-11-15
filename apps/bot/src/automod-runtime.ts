@@ -15,7 +15,9 @@ export type AutomodAction = AutomodConfig["flood"]["action"];
 
 export interface AutomodDecision {
   readonly action: AutomodAction;
+  readonly configuredAction: AutomodAction;
   readonly findings: readonly ModerationFinding[];
+  readonly points: number;
   readonly timeoutMinutes: number;
 }
 
@@ -24,6 +26,7 @@ const actionWeight: Readonly<Record<AutomodAction, number>> = {
   delete: 1,
   kick: 4,
   observe: 0,
+  points: 0,
   quarantine: 3,
   timeout: 2,
 };
@@ -77,6 +80,7 @@ function ruleFor(
 ): {
   readonly action: AutomodAction;
   readonly enabled: boolean;
+  readonly points: number;
   readonly timeoutMinutes: number;
 } {
   switch (signal) {
@@ -120,7 +124,9 @@ export class AutomodRuntime {
     if (!this.#config.enabled) {
       return {
         action: "observe",
+        configuredAction: "observe",
         findings: [],
+        points: 0,
         timeoutMinutes: 10,
       };
     }
@@ -152,10 +158,25 @@ export class AutomodRuntime {
       },
       { action: "observe", timeoutMinutes: 10 },
     );
+    const pointRules = new Set<string>();
+    let points = 0;
+    for (const finding of findings) {
+      const key =
+        finding.signal === "attachment-rate" ||
+        finding.signal === "attachment-type"
+          ? "attachment-policy"
+          : finding.signal;
+      if (pointRules.has(key)) continue;
+      pointRules.add(key);
+      const rule = ruleFor(this.#config, finding.signal);
+      if (rule.action === "points") points = Math.max(points, rule.points);
+    }
     return {
       action:
         this.#config.mode === "enforce" ? configuredDecision.action : "observe",
+      configuredAction: configuredDecision.action,
       findings,
+      points: this.#config.mode === "observe" ? 0 : points,
       timeoutMinutes: configuredDecision.timeoutMinutes,
     };
   }

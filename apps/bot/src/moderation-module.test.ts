@@ -22,6 +22,7 @@ const item: ModerationCaseRecord = {
   resolutionReason: null,
   resolvedAt: null,
   resolvedById: null,
+  sourceEventKey: null,
   status: "open",
   summary: "Причина",
   timeoutMinutes: 60,

@@ -2,15 +2,14 @@ import Link from "next/link";
 
 import { requireOwnerSession } from "../../lib/auth";
 import { logoutAction } from "../logout-action";
-import { getModerationPageData } from "./data";
-import { ModerationForm } from "./moderation-form";
 import { PublishModerationForm } from "./publish-form";
+import { getModerationSystemPageData } from "./system-data";
+import { ModerationSystemForm } from "./system-form";
 
 export const dynamic = "force-dynamic";
 
 const navigation = [
   ["Обзор", "/"],
-  ["Автомодерация", "/automod"],
   ["Модерация", "/moderation"],
   ["Тикеты", "/tickets"],
   ["Голосовые", "/voice"],
@@ -32,18 +31,19 @@ const statusLabels = {
 const statusDescriptions = {
   draft: "Черновик сохранён и готов к публикации.",
   failed: "Бот не смог применить версию. Причина указана ниже.",
-  new: "Действуют безопасные настройки по умолчанию.",
-  published: "Эта версия управляет делами, баллами и эскалацией.",
+  new: "Действуют последние раздельные настройки модулей.",
+  published: "Эта версия управляет флагами, делами, баллами и эскалацией.",
   queued: "Бот получил версию и применяет настройки.",
   superseded: "Эту версию заменила более новая конфигурация.",
 } as const;
 
 export default async function ModerationPage() {
   const session = await requireOwnerSession();
-  const { activeCaseCount, roles, snapshot } = await getModerationPageData();
-  const enabledThresholds = Object.values(snapshot.config.thresholds).filter(
-    ({ enabled }) => enabled,
-  ).length;
+  const { activeCaseCount, resources, roles, snapshot } =
+    await getModerationSystemPageData();
+  const enabledThresholds = Object.values(
+    snapshot.config.manual.thresholds,
+  ).filter(({ enabled }) => enabled).length;
   return (
     <div className="shell automodShell voiceShell moderationShell">
       <aside className="sidebar">
@@ -82,7 +82,7 @@ export default async function ModerationPage() {
             <span>Система доступна</span>
           </div>
           <div className="topbarMeta">
-            <span>Настройки ручной модерации</span>
+            <span>Настройки модерации</span>
             <form action={logoutAction}>
               <button className="quietButton" type="submit">
                 Выйти
@@ -93,11 +93,11 @@ export default async function ModerationPage() {
 
         <section className="intro automodIntro">
           <p className="sectionPath">Модуль 02</p>
-          <h1>Ручная модерация</h1>
+          <h1>Модерация</h1>
           <p>
-            Настройте баллы, сроки и автоматическую эскалацию. Сотрудники
-            работают через команду /модерация, каждое действие становится
-            постоянным делом в PostgreSQL.
+            Единый контур автоматических флагов и ручных решений. Настройте
+            реакции, баллы, сроки и эскалацию, а затем опубликуйте их одной
+            версией.
           </p>
         </section>
 
@@ -116,7 +116,11 @@ export default async function ModerationPage() {
           />
         </section>
 
-        <ModerationForm config={snapshot.config} roles={roles} />
+        <ModerationSystemForm
+          config={snapshot.config}
+          resources={resources}
+          roles={roles}
+        />
       </main>
 
       <aside className="changeRail" aria-label="Состояние публикации">
@@ -139,8 +143,18 @@ export default async function ModerationPage() {
               <dd>{enabledThresholds} / 3</dd>
             </div>
             <div>
+              <dt>Режим автомода</dt>
+              <dd>
+                {snapshot.config.automod.mode === "observe"
+                  ? "Наблюдение"
+                  : snapshot.config.automod.mode === "points"
+                    ? "Только баллы"
+                    : "Полная работа"}
+              </dd>
+            </div>
+            <div>
               <dt>Сгорание баллов</dt>
-              <dd>{snapshot.config.pointExpiryDays} дн.</dd>
+              <dd>{snapshot.config.manual.pointExpiryDays} дн.</dd>
             </div>
           </dl>
         </section>
