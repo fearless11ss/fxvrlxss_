@@ -3,6 +3,7 @@ import type { ModerationAction } from "@fxvrlxss/domain/moderation-config";
 export interface ModerationEvidence {
   readonly automodAction?: string;
   readonly channelId?: string;
+  readonly messageDeleted?: boolean;
   readonly messageId?: string;
   readonly reference: string | null;
   readonly signals?: readonly string[];

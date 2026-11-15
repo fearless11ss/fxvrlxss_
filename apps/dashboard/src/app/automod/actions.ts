@@ -57,6 +57,7 @@ export async function saveAutomodDraft(
       allowGif: enabled(formData, "allowGif"),
       allowImages: enabled(formData, "allowImages"),
       allowVideo: enabled(formData, "allowVideo"),
+      deleteMessage: enabled(formData, "attachmentDeleteMessage"),
       enabled: enabled(formData, "attachmentEnabled"),
       maximumPerWindow: numberValue(formData, "attachmentMaximumPerWindow"),
       points: optionalNumberValue(formData, "attachmentPoints"),
@@ -65,6 +66,7 @@ export async function saveAutomodDraft(
     },
     caps: {
       action: formData.get("capsAction"),
+      deleteMessage: enabled(formData, "capsDeleteMessage"),
       enabled: enabled(formData, "capsEnabled"),
       minimumLetters: numberValue(formData, "capsMinimumLetters"),
       points: optionalNumberValue(formData, "capsPoints"),
@@ -73,6 +75,7 @@ export async function saveAutomodDraft(
     },
     emojiSpam: {
       action: formData.get("emojiAction"),
+      deleteMessage: enabled(formData, "emojiDeleteMessage"),
       enabled: enabled(formData, "emojiEnabled"),
       maximum: numberValue(formData, "emojiMaximum"),
       points: optionalNumberValue(formData, "emojiPoints"),
@@ -83,6 +86,7 @@ export async function saveAutomodDraft(
     exemptRoleIds: idList(formData, "exemptRoleIds"),
     flood: {
       action: formData.get("floodAction"),
+      deleteMessage: enabled(formData, "floodDeleteMessage"),
       enabled: enabled(formData, "floodEnabled"),
       maximumMessages: numberValue(formData, "floodMaximumMessages"),
       points: optionalNumberValue(formData, "floodPoints"),
@@ -91,12 +95,14 @@ export async function saveAutomodDraft(
     },
     inviteLinks: {
       action: formData.get("inviteAction"),
+      deleteMessage: enabled(formData, "inviteDeleteMessage"),
       enabled: enabled(formData, "inviteEnabled"),
       points: optionalNumberValue(formData, "invitePoints"),
       timeoutMinutes: optionalNumberValue(formData, "inviteTimeoutMinutes"),
     },
     messageLength: {
       action: formData.get("messageLengthAction"),
+      deleteMessage: enabled(formData, "messageLengthDeleteMessage"),
       enabled: enabled(formData, "messageLengthEnabled"),
       maximumCharacters: numberValue(formData, "messageLengthMaximum"),
       points: optionalNumberValue(formData, "messageLengthPoints"),
@@ -108,6 +114,7 @@ export async function saveAutomodDraft(
     mode: formData.get("mode"),
     repeatedMessages: {
       action: formData.get("repeatedAction"),
+      deleteMessage: enabled(formData, "repeatedDeleteMessage"),
       enabled: enabled(formData, "repeatedEnabled"),
       maximumRepeats: numberValue(formData, "repeatedMaximumRepeats"),
       points: optionalNumberValue(formData, "repeatedPoints"),

@@ -21,12 +21,23 @@ interface AutomodResourceOptions {
 const actions = [
   ["observe", "Только наблюдать"],
   ["points", "Добавить баллы"],
-  ["delete", "Удалить сообщение"],
   ["timeout", "Выдать тайм-аут"],
   ["quarantine", "Отправить в карантин"],
   ["kick", "Незамедлительно кикнуть"],
   ["ban", "Незамедлительно забанить"],
 ] as const;
+
+function DeleteMessageToggle({
+  checked,
+  name,
+}: Readonly<{ checked: boolean; name: string }>) {
+  return (
+    <label className="ruleDeleteOption">
+      <input defaultChecked={checked} name={name} type="checkbox" />
+      <span>Удалять сообщение с нарушением</span>
+    </label>
+  );
+}
 
 function ActionSelect({
   name,
@@ -139,6 +150,10 @@ export function AutomodFields({
               <span>Включено</span>
             </label>
           </header>
+          <DeleteMessageToggle
+            checked={config.flood.deleteMessage}
+            name="floodDeleteMessage"
+          />
           <div className="ruleBody">
             <label>
               <span>Сообщений</span>
@@ -183,6 +198,10 @@ export function AutomodFields({
               <span>Включено</span>
             </label>
           </header>
+          <DeleteMessageToggle
+            checked={config.repeatedMessages.deleteMessage}
+            name="repeatedDeleteMessage"
+          />
           <div className="ruleBody">
             <label>
               <span>Повторов</span>
@@ -227,6 +246,10 @@ export function AutomodFields({
               <span>Включено</span>
             </label>
           </header>
+          <DeleteMessageToggle
+            checked={config.caps.deleteMessage}
+            name="capsDeleteMessage"
+          />
           <div className="ruleBody">
             <label>
               <span>Минимум букв</span>
@@ -271,6 +294,10 @@ export function AutomodFields({
               <span>Включено</span>
             </label>
           </header>
+          <DeleteMessageToggle
+            checked={config.emojiSpam.deleteMessage}
+            name="emojiDeleteMessage"
+          />
           <div className="ruleBody">
             <label>
               <span>Максимум emoji</span>
@@ -305,6 +332,10 @@ export function AutomodFields({
               <span>Включено</span>
             </label>
           </header>
+          <DeleteMessageToggle
+            checked={config.inviteLinks.deleteMessage}
+            name="inviteDeleteMessage"
+          />
           <div className="ruleBody">
             <p className="ruleDescription">
               Ссылки-приглашения обрабатываются нативным Discord AutoMod.
@@ -332,6 +363,10 @@ export function AutomodFields({
               <span>Включено</span>
             </label>
           </header>
+          <DeleteMessageToggle
+            checked={config.attachmentPolicy.deleteMessage}
+            name="attachmentDeleteMessage"
+          />
           <div className="ruleBody">
             <div className="compactChecks">
               <label>
@@ -405,6 +440,10 @@ export function AutomodFields({
               <span>Включено</span>
             </label>
           </header>
+          <DeleteMessageToggle
+            checked={config.messageLength.deleteMessage}
+            name="messageLengthDeleteMessage"
+          />
           <div className="ruleBody">
             <label>
               <span>Максимум символов</span>

@@ -16,6 +16,7 @@ export type AutomodAction = AutomodConfig["flood"]["action"];
 export interface AutomodDecision {
   readonly action: AutomodAction;
   readonly configuredAction: AutomodAction;
+  readonly deleteMessage: boolean;
   readonly findings: readonly ModerationFinding[];
   readonly points: number;
   readonly timeoutMinutes: number;
@@ -23,7 +24,6 @@ export interface AutomodDecision {
 
 const actionWeight: Readonly<Record<AutomodAction, number>> = {
   ban: 5,
-  delete: 1,
   kick: 4,
   observe: 0,
   points: 0,
@@ -79,6 +79,7 @@ function ruleFor(
   signal: CustomModerationSignal,
 ): {
   readonly action: AutomodAction;
+  readonly deleteMessage: boolean;
   readonly enabled: boolean;
   readonly points: number;
   readonly timeoutMinutes: number;
@@ -125,6 +126,7 @@ export class AutomodRuntime {
       return {
         action: "observe",
         configuredAction: "observe",
+        deleteMessage: false,
         findings: [],
         points: 0,
         timeoutMinutes: 10,
@@ -175,6 +177,11 @@ export class AutomodRuntime {
       action:
         this.#config.mode === "enforce" ? configuredDecision.action : "observe",
       configuredAction: configuredDecision.action,
+      deleteMessage:
+        this.#config.mode === "enforce" &&
+        findings.some(
+          (finding) => ruleFor(this.#config, finding.signal).deleteMessage,
+        ),
       findings,
       points: this.#config.mode === "observe" ? 0 : points,
       timeoutMinutes: configuredDecision.timeoutMinutes,

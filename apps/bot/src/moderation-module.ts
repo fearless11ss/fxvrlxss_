@@ -47,12 +47,13 @@ const actionLabels: Readonly<Record<ModerationAction, string>> = {
 };
 
 export type AutomatedModerationAction =
-  "observe" | "points" | "delete" | "timeout" | "quarantine" | "kick" | "ban";
+  "observe" | "points" | "timeout" | "quarantine" | "kick" | "ban";
 
 export interface AutomodViolationInput {
   readonly action: AutomatedModerationAction;
   readonly applyThresholds: boolean;
   readonly channelId: string;
+  readonly deleteMessage: boolean;
   readonly message?: Message;
   readonly messageId: string | null;
   readonly points: number;
@@ -73,7 +74,6 @@ const automatedActionLabels: Readonly<
   Record<AutomatedModerationAction, string>
 > = {
   ban: "бан",
-  delete: "удаление сообщения",
   kick: "кик",
   observe: "наблюдение",
   points: "начисление баллов",
@@ -87,7 +87,11 @@ function caseActionLabel(item: ModerationCaseRecord): string {
     item.evidence.automodAction &&
     item.evidence.automodAction in automatedActionLabels
   ) {
-    return `Автомод · ${automatedActionLabels[item.evidence.automodAction as AutomatedModerationAction]}`;
+    const action =
+      automatedActionLabels[
+        item.evidence.automodAction as AutomatedModerationAction
+      ];
+    return `Автомод · ${action}${item.evidence.messageDeleted ? " + удаление сообщения" : ""}`;
   }
   return actionLabels[item.appliedAction];
 }
@@ -384,6 +388,7 @@ export class ModerationModule
         evidence: {
           automodAction: input.action,
           channelId: input.channelId,
+          messageDeleted: input.deleteMessage,
           ...(input.messageId ? { messageId: input.messageId } : {}),
           reference: input.messageId
             ? `https://discord.com/channels/${this.#guild.id}/${input.channelId}/${input.messageId}`
@@ -413,10 +418,15 @@ export class ModerationModule
       }
     }
 
-    const appliedAction =
+    const primaryAction =
       decision.action !== "warn"
         ? actionLabels[decision.action]
         : automatedActionLabels[input.action];
+    const appliedAction = input.deleteMessage
+      ? input.action === "observe" && decision.action === "warn"
+        ? "удаление сообщения"
+        : `${primaryAction} + удаление сообщения`
+      : primaryAction;
     await this.#notifyAutomodMember({
       activePoints,
       appliedAction,
@@ -428,16 +438,16 @@ export class ModerationModule
     });
 
     try {
-      const target =
-        input.action === "quarantine" || decision.action !== "warn"
-          ? await this.#guild.members.fetch(input.userId)
-          : undefined;
-      if (input.message && !["observe", "points"].includes(input.action)) {
+      if (input.message && input.deleteMessage) {
         if (!input.message.deletable) {
           throw new Error("Сообщение нельзя удалить");
         }
         await input.message.delete();
       }
+      const target =
+        input.action === "quarantine" || decision.action !== "warn"
+          ? await this.#guild.members.fetch(input.userId)
+          : undefined;
       if (
         input.action === "quarantine" &&
         decision.action !== "kick" &&
@@ -483,6 +493,7 @@ export class ModerationModule
           action: input.action,
           activePoints,
           appliedAction: decision.action,
+          deleteMessage: input.deleteMessage,
           points: input.points,
           signals: input.signals,
         },

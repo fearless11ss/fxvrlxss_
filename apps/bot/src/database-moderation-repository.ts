@@ -26,6 +26,9 @@ function record(
       ...(typeof evidence.channelId === "string"
         ? { channelId: evidence.channelId }
         : {}),
+      ...(typeof evidence.messageDeleted === "boolean"
+        ? { messageDeleted: evidence.messageDeleted }
+        : {}),
       ...(typeof evidence.messageId === "string"
         ? { messageId: evidence.messageId }
         : {}),

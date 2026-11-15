@@ -22,11 +22,7 @@ function inviteActions(
   config: AutomodConfig,
   resources: GuildResources,
 ): readonly AutoModerationActionOptions[] {
-  if (
-    config.mode !== "enforce" ||
-    config.inviteLinks.action === "observe" ||
-    config.inviteLinks.action === "points"
-  ) {
+  if (config.mode !== "enforce" || !config.inviteLinks.deleteMessage) {
     return [
       {
         metadata: { channel: resources.channels.logs.security },

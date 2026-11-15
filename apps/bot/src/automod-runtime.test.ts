@@ -23,6 +23,7 @@ describe("AutomodRuntime", () => {
       emojiSpam: { ...defaultAutomodConfig.emojiSpam, enabled: false },
       flood: {
         action: "points",
+        deleteMessage: true,
         enabled: true,
         maximumMessages: 2,
         points: 2,
@@ -39,6 +40,7 @@ describe("AutomodRuntime", () => {
     expect(runtime.inspect(message("first", 1_000)).action).toBe("observe");
     const decision = runtime.inspect(message("second", 2_000));
     expect(decision.action).toBe("observe");
+    expect(decision.deleteMessage).toBe(true);
     expect(decision.points).toBe(2);
     expect(decision.findings.map(({ signal }) => signal)).toContain("flood");
   });
@@ -97,6 +99,7 @@ describe("AutomodRuntime", () => {
 
     expect(decision.action).toBe("observe");
     expect(decision.configuredAction).toBe("kick");
+    expect(decision.deleteMessage).toBe(false);
     expect(decision.points).toBe(5);
   });
 
@@ -105,6 +108,7 @@ describe("AutomodRuntime", () => {
       ...defaultAutomodConfig,
       flood: {
         action: "quarantine",
+        deleteMessage: true,
         enabled: true,
         maximumMessages: 2,
         points: 0,
@@ -152,6 +156,7 @@ describe("AutomodRuntime", () => {
       ...defaultAutomodConfig,
       messageLength: {
         action: "kick",
+        deleteMessage: false,
         enabled: true,
         maximumCharacters: 3,
         points: 0,
@@ -165,6 +170,7 @@ describe("AutomodRuntime", () => {
       content: "длинное сообщение",
     });
     expect(decision.action).toBe("kick");
+    expect(decision.deleteMessage).toBe(false);
     expect(decision.findings.map(({ signal }) => signal)).toContain(
       "message-length",
     );

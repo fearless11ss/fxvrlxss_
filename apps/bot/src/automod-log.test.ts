@@ -23,6 +23,7 @@ describe("automod Discord log summary", () => {
       {
         action: "observe",
         configuredAction: "timeout",
+        deleteMessage: false,
         findings: [
           { details: { messages: 7 }, signal: "flood" },
           { details: { repeats: 7 }, signal: "repeated-message" },
@@ -39,5 +40,6 @@ describe("automod Discord log summary", () => {
     expect(summary).toContain("Повторы: 7 одинаковых сообщений за 300 сек.");
     expect(summary).toContain("тайм-аут на 120 мин.");
     expect(summary).toContain("наказание не применялось");
+    expect(summary).toContain("Удаление: отключено режимом наблюдения");
   });
 });

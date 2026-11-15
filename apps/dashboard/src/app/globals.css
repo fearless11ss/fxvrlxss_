@@ -991,6 +991,22 @@ textarea:focus-visible {
   flex: 0 0 auto;
 }
 
+.ruleDeleteOption {
+  display: flex !important;
+  align-items: center;
+  gap: 11px !important;
+  padding: 14px 28px;
+  border-bottom: 1px solid var(--steel);
+  color: var(--ash);
+}
+
+.ruleDeleteOption input {
+  width: 17px;
+  min-height: 17px;
+  margin: 0;
+  accent-color: var(--bone);
+}
+
 .ruleBody {
   display: grid;
   flex: 1;

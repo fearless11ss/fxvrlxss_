@@ -8,6 +8,7 @@ import type { AutomodAction, AutomodDecision } from "./automod-runtime.js";
 
 interface AutomodRule {
   readonly action: AutomodAction;
+  readonly deleteMessage: boolean;
   readonly points: number;
   readonly timeoutMinutes: number;
 }
@@ -40,8 +41,6 @@ export function automodActionLabel(
   switch (action) {
     case "ban":
       return "бан";
-    case "delete":
-      return "удаление сообщения";
     case "kick":
       return "кик";
     case "observe":
@@ -135,7 +134,7 @@ export function buildAutomodLogSummary(
   const findings = decision.findings.map((finding) => {
     const { evidence, label } = findingEvidence(finding, config);
     const rule = ruleFor(config, finding.signal);
-    return `• ${label}: ${evidence}. Настройка: ${automodActionLabel(rule.action, rule.timeoutMinutes)}${rule.action === "points" ? ` · +${rule.points} б.` : ""}.`;
+    return `• ${label}: ${evidence}. Настройка: ${automodActionLabel(rule.action, rule.timeoutMinutes)}${rule.action === "points" ? ` · +${rule.points} б.` : ""}${rule.deleteMessage ? " · удалить сообщение" : ""}.`;
   });
   const result =
     config.mode === "observe"
@@ -146,11 +145,21 @@ export function buildAutomodLogSummary(
           ? "решение автомода — начисление баллов."
           : `решение автомода — ${automodActionLabel(decision.action, decision.timeoutMinutes)}.`;
 
+  const deletion =
+    config.mode === "observe"
+      ? "Удаление: отключено режимом наблюдения."
+      : config.mode === "points"
+        ? "Удаление: отключено режимом только баллов."
+        : decision.deleteMessage
+          ? "Удаление: сообщение с нарушением будет удалено."
+          : "Удаление: не настроено.";
+
   return [
     `Канал: <#${channelId}>`,
     `Сработало правил: ${decision.findings.length}.`,
     ...findings,
     `Баллы: ${config.mode !== "observe" && decision.points > 0 ? `+${decision.points}` : "не начислены"}.`,
+    deletion,
     `Итог: ${result}`,
   ].join("\n");
 }

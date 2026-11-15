@@ -108,7 +108,8 @@ function isAutomodExempt(message: Message, runtime: AutomodRuntime): boolean {
 
 async function applyCustomSanction(
   message: Message,
-  action: "ban" | "delete" | "kick" | "quarantine" | "timeout",
+  action: "ban" | "kick" | "observe" | "points" | "quarantine" | "timeout",
+  deleteMessage: boolean,
   timeoutMinutes: number,
   quarantineRoleId: string,
 ) {
@@ -125,10 +126,12 @@ async function applyCustomSanction(
   if (action === "ban" && !message.member?.bannable) {
     throw new Error("Matched member cannot be banned by the bot");
   }
-  if (!message.deletable) {
-    throw new Error("Matched message cannot be deleted by the bot");
+  if (deleteMessage) {
+    if (!message.deletable) {
+      throw new Error("Matched message cannot be deleted by the bot");
+    }
+    await message.delete();
   }
-  await message.delete();
   if (action === "timeout") {
     await message.member?.timeout(timeoutMinutes * 60_000, reason);
   }
@@ -540,7 +543,12 @@ export async function startGuildCore(
       ),
       title: "Сработала автомодерация",
     });
-    if (decision.action === "observe" && decision.points === 0) return;
+    if (
+      decision.action === "observe" &&
+      decision.points === 0 &&
+      !decision.deleteMessage
+    )
+      return;
     try {
       if (moderationModule) {
         await moderationModule.applyAutomodViolation({
@@ -552,6 +560,7 @@ export async function startGuildCore(
                 : decision.action,
           applyThresholds: automodRuntime.config.mode === "enforce",
           channelId: message.channelId,
+          deleteMessage: decision.deleteMessage,
           message,
           messageId: message.id,
           points: decision.points,
@@ -564,12 +573,13 @@ export async function startGuildCore(
           userId: message.author.id,
         });
       } else if (
-        decision.action !== "observe" &&
-        decision.action !== "points"
+        decision.deleteMessage ||
+        (decision.action !== "observe" && decision.action !== "points")
       ) {
         await applyCustomSanction(
           message,
           decision.action,
+          decision.deleteMessage,
           decision.timeoutMinutes,
           resources.roles.quarantine,
         );
@@ -736,18 +746,20 @@ export async function startGuildCore(
     );
     const inviteMode = automodRuntime.config.mode;
     const primaryExecutionType =
-      inviteMode !== "enforce" ||
-      inviteAction === "observe" ||
-      inviteAction === "points"
-        ? AutoModerationActionType.SendAlertMessage
-        : AutoModerationActionType.BlockMessage;
+      inviteMode === "enforce" &&
+      automodRuntime.config.inviteLinks.deleteMessage
+        ? AutoModerationActionType.BlockMessage
+        : AutoModerationActionType.SendAlertMessage;
     if (
       managedInviteRule &&
       automodRuntime.config.enabled &&
       execution.action.type === primaryExecutionType &&
       moderationModule &&
       inviteMode !== "observe" &&
-      (inviteMode === "enforce" || inviteAction === "points")
+      (inviteAction === "points" ||
+        (inviteMode === "enforce" &&
+          (inviteAction !== "observe" ||
+            automodRuntime.config.inviteLinks.deleteMessage)))
     ) {
       const member = await guild.members.fetch(execution.userId);
       if (isMemberAutomodExempt(member, automodRuntime)) return;
@@ -755,6 +767,9 @@ export async function startGuildCore(
         action: inviteMode === "points" ? "points" : inviteAction,
         applyThresholds: inviteMode === "enforce",
         channelId: execution.channelId ?? resources.channels.logs.security,
+        deleteMessage:
+          inviteMode === "enforce" &&
+          automodRuntime.config.inviteLinks.deleteMessage,
         messageId: execution.messageId ?? null,
         points:
           inviteAction === "points"
@@ -793,6 +808,9 @@ export async function startGuildCore(
         `Событие: ${discordAutomodActionLabel(execution.action.type)}.`,
         managedInviteRule
           ? `Настройка fxvrlxss_: ${automodActionLabel(inviteAction, automodRuntime.config.inviteLinks.timeoutMinutes)}.`
+          : undefined,
+        managedInviteRule
+          ? `Удаление сообщения: ${automodRuntime.config.inviteLinks.deleteMessage ? "включено" : "выключено"}.`
           : undefined,
       ]
         .filter((line): line is string => Boolean(line))

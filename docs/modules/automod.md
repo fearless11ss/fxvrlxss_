@@ -23,18 +23,21 @@ an additional message for flood.
 
 ## Rule actions
 
-Each rule selects exactly one direct action: observe, add points, delete,
-timeout, quarantine, kick, or ban. Point quantity is shown only for the
-add-points action.
+Each rule has an independent delete-message switch and one additional action:
+observe, add points, timeout, quarantine, kick, or ban. Point quantity is shown
+only for the add-points action. This allows one finding to remove the violating
+message and also award points or sanction the member.
 
 The global modes are:
 
 - observation: log findings without cases, points, or actions;
-- points: run only add-points rules, without direct or threshold sanctions;
-- full: execute configured direct actions and threshold escalation.
+- points: run only add-points rules, without deletion, direct sanctions, or
+  threshold sanctions;
+- full: execute configured deletion, direct actions, and threshold escalation.
 
-When multiple rules match one message, the strictest direct action wins and
-only the largest point value is added. All findings remain visible in evidence.
+When multiple rules match one message, deletion runs if any matched rule enables
+it, the strictest direct action wins, and only the largest point value is added.
+All findings remain visible in evidence.
 One source event creates at most one case; durable event keys prevent duplicate
 Discord delivery from awarding it twice.
 

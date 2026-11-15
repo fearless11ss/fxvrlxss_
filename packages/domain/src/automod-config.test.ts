@@ -36,11 +36,26 @@ describe("automodConfigSchema", () => {
     expect(parsed.attachmentPolicy.windowSeconds).toBe(30);
     expect(parsed.flood.timeoutMinutes).toBe(10);
     expect(parsed.flood.points).toBe(0);
+    expect(parsed.flood.deleteMessage).toBe(true);
     expect(parsed.inviteLinks.timeoutMinutes).toBe(10);
     expect(parsed.messageLength).toMatchObject({
       enabled: false,
       maximumCharacters: 1_500,
     });
+  });
+
+  it("upgrades the legacy delete action into an independent checkbox", () => {
+    const legacy = structuredClone(defaultAutomodConfig) as Record<
+      string,
+      unknown
+    >;
+    const caps = legacy.caps as Record<string, unknown>;
+    caps.action = "delete";
+    delete caps.deleteMessage;
+
+    const parsed = automodConfigSchema.parse(legacy);
+    expect(parsed.caps.action).toBe("observe");
+    expect(parsed.caps.deleteMessage).toBe(true);
   });
 
   it("rejects unsafe or nonsensical thresholds", () => {
