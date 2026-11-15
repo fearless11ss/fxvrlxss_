@@ -35,6 +35,7 @@ import {
   DiscordAuditWriter,
 } from "./discord-messages.js";
 import { DiscordAutomodAdapter } from "./discord-automod.js";
+import { buildDiscordAutomodSourceEventKey } from "./discord-automod-event.js";
 import { buildDeletedMessageLog } from "./deleted-message-log.js";
 import {
   resolveGuildResources,
@@ -782,7 +783,7 @@ export async function startGuildCore(
             ? automodRuntime.config.inviteLinks.points
             : 0,
         signals: ["invite-links"],
-        sourceEventKey: `discord-automod:${execution.ruleId}:${execution.messageId ?? execution.alertSystemMessageId ?? `${execution.userId}:${execution.matchedContent ?? "unknown"}`}`,
+        sourceEventKey: buildDiscordAutomodSourceEventKey(execution),
         summary: "стороннее приглашение Discord",
         timeoutMinutes: automodRuntime.config.inviteLinks.timeoutMinutes,
         userId: execution.userId,
