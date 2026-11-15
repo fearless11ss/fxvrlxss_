@@ -43,7 +43,7 @@ describe("Components V2 messages", () => {
     expect(JSON.stringify(container)).not.toContain("Исполнитель: `user-1`");
   });
 
-  it("renders channels and roles as Discord mentions", () => {
+  it("renders a channel mention together with its permanent ID", () => {
     const channel = buildAuditComponents({
       ...auditEvent,
       subject: { id: "channel-1", kind: "channel" },
@@ -53,11 +53,11 @@ describe("Components V2 messages", () => {
       subject: { id: "role-1", kind: "role" },
     })[0]?.toJSON();
 
-    expect(JSON.stringify(channel)).toContain("<#channel-1>");
+    expect(JSON.stringify(channel)).toContain("<#channel-1> · ID: channel-1");
     expect(JSON.stringify(role)).toContain("<@&role-1>");
   });
 
-  it("renders a snapshotted channel without a perishable mention", () => {
+  it("keeps the mention and ID when a channel snapshot has a label", () => {
     const channel = buildAuditComponents({
       ...auditEvent,
       subject: {
@@ -68,9 +68,8 @@ describe("Components V2 messages", () => {
     })[0]?.toJSON();
     const serialized = JSON.stringify(channel);
 
-    expect(serialized).toContain("Комната владельца");
-    expect(serialized).toContain("channel-1");
-    expect(serialized).not.toContain("<#channel-1>");
+    expect(serialized).toContain("<#channel-1> · ID: channel-1");
+    expect(serialized).not.toContain("`channel-1`");
   });
 
   it("builds lifecycle containers for joins and leaves", () => {

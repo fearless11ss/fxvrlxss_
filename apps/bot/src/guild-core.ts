@@ -710,7 +710,7 @@ export async function startGuildCore(
           type: channel.type,
         },
         subject: { id: channel.id, kind: "channel", label: channel.name },
-        summary: `Создан канал \`${channel.name}\`.`,
+        summary: `Создан канал ${channel.name}.`,
         title: "Канал создан",
       });
     }
@@ -737,7 +737,7 @@ export async function startGuildCore(
           type: channel.type,
         },
         subject: { id: channel.id, kind: "channel", label: channel.name },
-        summary: `Удалён канал \`${channel.name}\` (ID: \`${channel.id}\`).`,
+        summary: `Удалён канал ${channel.name}. ID: ${channel.id}.`,
         title: "Канал удалён",
       });
     }

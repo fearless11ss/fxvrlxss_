@@ -18,15 +18,15 @@ const snapshot: VoiceRoomSnapshot = {
 };
 
 describe("temporary voice lifecycle logs", () => {
-  it("keeps a stable creation snapshot without a channel mention", () => {
+  it("combines a channel mention with its permanent ID", () => {
     const summary = describeVoiceRoomLifecycle("created", snapshot);
 
     expect(summary).toContain("Комната fxvrlxss_");
-    expect(summary).toContain("ID: `voice-1`");
+    expect(summary).toContain("Канал: <#voice-1> · ID: voice-1");
     expect(summary).toContain("Владелец: <@owner-1>");
     expect(summary).toContain("вход закрыт · скрыта · лимит 4");
     expect(summary).toContain("доверенных — 2 · забаненных — 1");
-    expect(summary).not.toContain("<#voice-1>");
+    expect(summary).not.toContain("`voice-1`");
   });
 
   it("includes both lifecycle timestamps after deletion", () => {

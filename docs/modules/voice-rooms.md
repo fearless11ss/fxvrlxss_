@@ -76,6 +76,11 @@ name and raw ID, owner, creation and deletion times, lock and visibility state,
 participant limit, and the trusted and banned user IDs. The log therefore
 remains readable after Discord removes the channel object.
 
+Every voice-room event is routed to the `сервер` log. Channel references are
+rendered as a clickable Discord mention next to the raw numeric ID. After
+deletion Discord changes the mention to `#неизвестно`, which acts as the visual
+deletion marker while the saved name and ID remain searchable.
+
 Low-level `channel.created`, `channel.updated`, and `channel.deleted` events are
 still written to PostgreSQL. For managed temporary rooms they are not repeated
 in Discord, so the bot's permission-overwrite setup does not flood the server

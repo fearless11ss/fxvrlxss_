@@ -751,12 +751,12 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
     );
     await this.#audit.publish({
       actor: { id: state.id, kind: "user" },
-      category: "bot",
+      category: "server",
       discord: true,
       eventType: "voice.access_blocked",
       payload: { channelId: room.channelId, ownerId: room.ownerId },
       subject: { id: state.id, kind: "user" },
-      summary: `<@${state.id}> отключён от <#${room.channelId}>: пользователь находится в списке забаненных владельца <@${room.ownerId}>.`,
+      summary: `<@${state.id}> отключён от <#${room.channelId}> · ID: ${room.channelId}. Пользователь находится в списке забаненных владельца <@${room.ownerId}>.`,
       title: "Вход во временную комнату заблокирован",
     });
   }
@@ -803,12 +803,12 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
     await this.#ensureRoomControl(updated, channel);
     await this.#audit.publish({
       actor: { id: departedUserId, kind: "user" },
-      category: "bot",
+      category: "server",
       discord: true,
       eventType: "voice.owner_transferred_automatically",
       payload: { channelId, ownerId: nextOwner.id },
-      subject: { id: channelId, kind: "channel" },
-      summary: `Владение <#${channelId}> автоматически передано <@${nextOwner.id}> после выхода прежнего владельца.`,
+      subject: { id: channelId, kind: "channel", label: channel.name },
+      summary: `Канал: <#${channelId}> · ID: ${channelId}. Владение автоматически передано <@${nextOwner.id}> после выхода прежнего владельца.`,
       title: "Владелец комнаты изменён",
     });
   }
@@ -1091,7 +1091,7 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
     const list = accessKindLabel(kind).toLowerCase();
     await this.#audit.publish({
       actor: { id: ownerId, kind: "user" },
-      category: "bot",
+      category: "server",
       discord: true,
       eventType: `voice.access_${kind}_${added ? "added" : "removed"}`,
       payload: { action, kind, ownerId, subjectId },
@@ -1111,12 +1111,12 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
   ): Promise<void> {
     await this.#audit.publish({
       actor: { id: actorId, kind: "user" },
-      category: "bot",
+      category: "server",
       discord: true,
       eventType: "voice.room_updated",
       payload: { channelId: room.channelId, ...payload },
       subject: { id: room.channelId, kind: "channel" },
-      summary: `${title} в <#${room.channelId}>.`,
+      summary: `Канал: <#${room.channelId}> · ID: ${room.channelId}.`,
       title,
     });
   }

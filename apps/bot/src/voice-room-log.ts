@@ -11,10 +11,6 @@ export interface VoiceRoomSnapshot {
   readonly userLimit: number;
 }
 
-function inline(value: string): string {
-  return `\`${value.replaceAll("`", "ˋ")}\``;
-}
-
 function timestamp(value: string): string {
   return `<t:${Math.floor(new Date(value).getTime() / 1_000)}:F>`;
 }
@@ -32,8 +28,8 @@ export function describeVoiceRoomLifecycle(
   snapshot: VoiceRoomSnapshot,
 ): string {
   return [
-    `Комната: ${inline(snapshot.name)}`,
-    `ID: ${inline(snapshot.channelId)}`,
+    `Канал: <#${snapshot.channelId}> · ID: ${snapshot.channelId}`,
+    `Название: ${snapshot.name}`,
     `Владелец: <@${snapshot.ownerId}>`,
     `Создана: ${timestamp(snapshot.createdAt)}`,
     kind === "deleted" && snapshot.deletedAt

@@ -21,9 +21,9 @@ describe("channel update log", () => {
 
     expect(result.title).toBe("Права канала изменены");
     expect(result.summary).toContain(
-      "Изменены права доступа канала `тикет-0001` (ID: `channel-1`).",
+      "Изменены права доступа канала <#channel-1> · ID: channel-1.",
     );
-    expect(result.summary).not.toContain("<#channel-1>");
+    expect(result.summary).not.toContain("`channel-1`");
     expect(result.summary).not.toContain("тикет-0001` → `тикет-0001");
   });
 
@@ -34,6 +34,6 @@ describe("channel update log", () => {
     });
 
     expect(result.title).toBe("Канал переименован");
-    expect(result.summary).toContain("`тикет-0001` → `помощь-0001`");
+    expect(result.summary).toContain("тикет-0001 → помощь-0001");
   });
 });

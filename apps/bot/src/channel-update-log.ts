@@ -35,11 +35,11 @@ function permissionsKey(
 }
 
 function category(id: string | null): string {
-  return id ? `<#${id}>` : "без категории";
+  return id ? `<#${id}> · ID: ${id}` : "без категории";
 }
 
 function channel(snapshot: ChannelUpdateSnapshot): string {
-  return `\`${snapshot.name.replaceAll("`", "ˋ")}\` (ID: \`${snapshot.id}\`)`;
+  return `<#${snapshot.id}> · ID: ${snapshot.id}`;
 }
 
 export function describeChannelUpdate(
@@ -51,7 +51,7 @@ export function describeChannelUpdate(
 
   if (before.name !== after.name) {
     changes.push("name");
-    lines.push(`Канал переименован: \`${before.name}\` → \`${after.name}\`.`);
+    lines.push(`Канал переименован: ${before.name} → ${after.name}.`);
   }
   if (
     permissionsKey(before.permissionOverwrites) !==
