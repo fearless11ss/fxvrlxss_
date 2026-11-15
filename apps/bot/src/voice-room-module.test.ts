@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { defaultVoiceConfig } from "@fxvrlxss/domain/voice-config";
-import { buildVoiceRoomControls } from "./voice-room-module.js";
+import {
+  buildVoiceAccessManager,
+  buildVoiceRoomControls,
+} from "./voice-room-module.js";
+import type { VoiceAccessEntry } from "./voice-access-repository.js";
 import type { VoiceRoomRecord } from "./voice-room-repository.js";
 
 const room: VoiceRoomRecord = {
@@ -29,8 +33,8 @@ describe("temporary voice Components V2", () => {
     expect(serialized).toContain("voice:limit:open");
     expect(serialized).toContain("voice:lock");
     expect(serialized).toContain("voice:hide");
-    expect(serialized).toContain("voice:member:add:open");
-    expect(serialized).toContain("voice:member:remove:open");
+    expect(serialized).toContain("voice:access:trusted:open");
+    expect(serialized).toContain("voice:access:banned:open");
     expect(serialized).toContain("voice:owner:open");
     expect(serialized).toContain("без лимита");
   });
@@ -46,5 +50,30 @@ describe("temporary voice Components V2", () => {
     expect(serialized).toContain("Открыть вход");
     expect(serialized).toContain("Показать");
     expect(serialized).toContain("лимит 4");
+  });
+
+  it("renders a persistent owner access list", () => {
+    const entries: VoiceAccessEntry[] = [
+      {
+        guildId: "guild-1",
+        kind: "trusted",
+        ownerId: "owner-1",
+        subjectId: "friend-1",
+      },
+      {
+        guildId: "guild-1",
+        kind: "banned",
+        ownerId: "owner-1",
+        subjectId: "blocked-1",
+      },
+    ];
+    const controls = buildVoiceAccessManager("trusted", entries)[0]?.toJSON();
+    const serialized = JSON.stringify(controls);
+
+    expect(serialized).toContain("<@friend-1>");
+    expect(serialized).not.toContain("<@blocked-1>");
+    expect(serialized).toContain("voice:access:trusted:add:open");
+    expect(serialized).toContain("voice:access:trusted:remove:open");
+    expect(serialized).toContain("всех его будущих комнат");
   });
 });

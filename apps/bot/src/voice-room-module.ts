@@ -13,6 +13,7 @@ import {
   MessageFlags,
   MessageType,
   ModalBuilder,
+  OverwriteType,
   PermissionFlagsBits,
   TextDisplayBuilder,
   TextInputBuilder,
@@ -31,11 +32,17 @@ import type { AuditBus } from "./audit.js";
 import type { GuildResources } from "./guild-resources.js";
 import type { VoiceConfigurationApplier } from "./voice-publication.js";
 import type {
+  VoiceAccessEntry,
+  VoiceAccessKind,
+  VoiceAccessRepository,
+} from "./voice-access-repository.js";
+import type {
   VoiceRoomRecord,
   VoiceRoomRepository,
 } from "./voice-room-repository.js";
 
 const LEGACY_PANEL_ID = "voice:panel";
+const MAX_ACCESS_PROFILE_ENTRIES = 90;
 const RENAME_MODAL_ID = "voice:rename:submit";
 const LIMIT_MODAL_ID = "voice:limit:submit";
 
@@ -82,13 +89,13 @@ export function buildVoiceRoomControls(
   if (config.controls.allowMemberManagement) {
     members.addComponents(
       new ButtonBuilder()
-        .setCustomId("voice:member:add:open")
-        .setLabel("Добавить участника")
+        .setCustomId("voice:access:trusted:open")
+        .setLabel("Доверенные")
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
-        .setCustomId("voice:member:remove:open")
-        .setLabel("Удалить участника")
-        .setStyle(ButtonStyle.Secondary),
+        .setCustomId("voice:access:banned:open")
+        .setLabel("Забаненные")
+        .setStyle(ButtonStyle.Danger),
     );
   }
   if (config.controls.allowOwnershipTransfer) {
@@ -121,6 +128,55 @@ export function buildVoiceRoomControls(
   if (primary.components.length > 0) container.addActionRowComponents(primary);
   if (members.components.length > 0) container.addActionRowComponents(members);
   return [container];
+}
+
+function accessKindLabel(kind: VoiceAccessKind): string {
+  return kind === "trusted" ? "Доверенные" : "Забаненные";
+}
+
+export function buildVoiceAccessManager(
+  kind: VoiceAccessKind,
+  entries: readonly VoiceAccessEntry[],
+): ContainerBuilder[] {
+  const matching = entries.filter((entry) => entry.kind === kind);
+  const visible = matching.slice(0, 25).map((entry) => `<@${entry.subjectId}>`);
+  const list =
+    visible.length === 0
+      ? "Список пуст."
+      : [
+          visible.join(" · "),
+          matching.length > visible.length
+            ? `И ещё: ${matching.length - visible.length}.`
+            : undefined,
+        ]
+          .filter((line): line is string => Boolean(line))
+          .join("\n");
+  const explanation =
+    kind === "trusted"
+      ? "Эти пользователи могут входить в закрытые и скрытые комнаты владельца. Список действует для всех его будущих комнат."
+      : "Эти пользователи не могут входить ни в одну текущую или будущую комнату владельца.";
+  return [
+    new ContainerBuilder()
+      .setAccentColor(kind === "trusted" ? 0xf2f2ef : 0x9f1d2d)
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(
+          [`## ${accessKindLabel(kind)}`, explanation, list].join("\n\n"),
+        ),
+      )
+      .addActionRowComponents(
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`voice:access:${kind}:add:open`)
+            .setLabel("Добавить")
+            .setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder()
+            .setCustomId(`voice:access:${kind}:remove:open`)
+            .setDisabled(matching.length === 0)
+            .setLabel("Убрать")
+            .setStyle(ButtonStyle.Secondary),
+        ),
+      ),
+  ];
 }
 
 function renameModal(channelName: string): ModalBuilder {
@@ -163,6 +219,7 @@ function limitModal(userLimit: number): ModalBuilder {
 }
 
 export class VoiceRoomModule implements VoiceConfigurationApplier {
+  readonly #accessRepository: VoiceAccessRepository;
   readonly #audit: AuditBus;
   readonly #guild: Guild;
   readonly #logger: Logger;
@@ -171,12 +228,14 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
   #config: VoiceConfig = defaultVoiceConfig;
 
   constructor(options: {
+    readonly accessRepository: VoiceAccessRepository;
     readonly audit: AuditBus;
     readonly guild: Guild;
     readonly logger: Logger;
     readonly repository: VoiceRoomRepository;
     readonly resources: GuildResources;
   }) {
+    this.#accessRepository = options.accessRepository;
     this.#audit = options.audit;
     this.#guild = options.guild;
     this.#logger = options.logger;
@@ -214,6 +273,7 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
     if (before.channelId) {
       await this.#cleanupDepartedRoom(before.channelId, after.id);
     }
+    if (after.channelId) await this.#enforceJoinedRoom(after);
   }
 
   async handleChannelDelete(channelId: string): Promise<void> {
@@ -347,48 +407,20 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
       return true;
     }
 
-    if (
-      interaction.isButton() &&
-      [
-        "voice:member:add:open",
-        "voice:member:remove:open",
-        "voice:owner:open",
-      ].includes(customId)
-    ) {
-      const transfer = customId === "voice:owner:open";
-      if (
-        (transfer && !this.#config.controls.allowOwnershipTransfer) ||
-        (!transfer && !this.#config.controls.allowMemberManagement)
-      ) {
-        return true;
-      }
-      const action = transfer
-        ? "owner"
-        : customId.includes(":add:")
-          ? "member:add"
-          : "member:remove";
+    if (interaction.isButton() && customId === "voice:owner:open") {
+      if (!this.#config.controls.allowOwnershipTransfer) return true;
       const select = new UserSelectMenuBuilder()
-        .setCustomId(`voice:${action}`)
+        .setCustomId("voice:owner")
         .setMaxValues(1)
         .setMinValues(1)
-        .setPlaceholder(
-          transfer
-            ? "Новый владелец из текущей комнаты"
-            : action === "member:add"
-              ? "Кому разрешить вход"
-              : "Кого удалить из комнаты",
-        );
+        .setPlaceholder("Новый владелец из текущей комнаты");
       await interaction.reply({
         components: [
           new ContainerBuilder()
             .setAccentColor(0xf2f2ef)
             .addTextDisplayComponents(
               new TextDisplayBuilder().setContent(
-                transfer
-                  ? "## Передать комнату\nВыберите участника, который уже находится в вашей комнате."
-                  : action === "member:add"
-                    ? "## Добавить участника\nВыберите пользователя, которому нужен доступ."
-                    : "## Удалить участника\nПользователь будет отключён и не сможет вернуться без нового разрешения.",
+                "## Передать комнату\nВыберите участника, который уже находится в вашей комнате.",
               ),
             )
             .addActionRowComponents(
@@ -402,7 +434,59 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
       return true;
     }
 
-    if (interaction.isUserSelectMenu()) {
+    const accessListMatch = /^voice:access:(trusted|banned):open$/.exec(
+      customId,
+    );
+    if (interaction.isButton() && accessListMatch) {
+      if (!this.#config.controls.allowMemberManagement) return true;
+      const kind = accessListMatch[1] as VoiceAccessKind;
+      const entries = await this.#accessRepository.list(
+        this.#guild.id,
+        room.ownerId,
+      );
+      await interaction.reply({
+        allowedMentions: { parse: [] },
+        components: buildVoiceAccessManager(kind, entries),
+        flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+      });
+      return true;
+    }
+
+    const accessPickerMatch =
+      /^voice:access:(trusted|banned):(add|remove):open$/.exec(customId);
+    if (interaction.isButton() && accessPickerMatch) {
+      if (!this.#config.controls.allowMemberManagement) return true;
+      const kind = accessPickerMatch[1] as VoiceAccessKind;
+      const action = accessPickerMatch[2] as "add" | "remove";
+      const select = new UserSelectMenuBuilder()
+        .setCustomId(`voice:access:${kind}:${action}`)
+        .setMaxValues(1)
+        .setMinValues(1)
+        .setPlaceholder(
+          action === "add"
+            ? `Кого добавить: ${accessKindLabel(kind).toLowerCase()}`
+            : `Кого убрать: ${accessKindLabel(kind).toLowerCase()}`,
+        );
+      await interaction.update({
+        components: [
+          new ContainerBuilder()
+            .setAccentColor(kind === "trusted" ? 0xf2f2ef : 0x9f1d2d)
+            .addTextDisplayComponents(
+              new TextDisplayBuilder().setContent(
+                `## ${action === "add" ? "Добавить" : "Убрать"}\nВыберите пользователя для списка «${accessKindLabel(kind)}».`,
+              ),
+            )
+            .addActionRowComponents(
+              new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(
+                select,
+              ),
+            ),
+        ],
+      });
+      return true;
+    }
+
+    if (interaction.isUserSelectMenu() && customId === "voice:owner") {
       const selected = interaction.users.first();
       if (!selected || selected.bot || selected.id === room.ownerId) {
         await interaction.reply({
@@ -412,83 +496,105 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
         return true;
       }
       const member = await this.#guild.members.fetch(selected.id);
-      if (customId === "voice:owner") {
-        if (!this.#config.controls.allowOwnershipTransfer) return true;
-        if (member.voice.channelId !== room.channelId) {
-          await interaction.reply({
-            content: "Передать комнату можно только участнику внутри неё.",
-            flags: MessageFlags.Ephemeral,
-          });
-          return true;
-        }
-        const existing = await this.#repository.findByOwner(
-          this.#guild.id,
-          member.id,
-        );
-        if (existing) {
-          await interaction.reply({
-            content: "У выбранного участника уже есть временная комната.",
-            flags: MessageFlags.Ephemeral,
-          });
-          return true;
-        }
-        const updated = await this.#repository.update(room.channelId, {
-          ownerId: member.id,
+      if (!this.#config.controls.allowOwnershipTransfer) return true;
+      if (member.voice.channelId !== room.channelId) {
+        await interaction.reply({
+          content: "Передать комнату можно только участнику внутри неё.",
+          flags: MessageFlags.Ephemeral,
         });
-        if (!updated) throw new Error("Temporary voice room disappeared");
-        await this.#applyAccess(updated, channel);
-        await this.#ensureRoomControl(updated, channel);
-        await interaction.update({
-          components: [
-            new ContainerBuilder()
-              .setAccentColor(0xf2f2ef)
-              .addTextDisplayComponents(
-                new TextDisplayBuilder().setContent(
-                  `## Комната передана\nНовый владелец: <@${member.id}>.`,
-                ),
-              ),
-          ],
-        });
-        await this.#logChange(
-          updated,
-          interaction.user.id,
-          "Владелец комнаты изменён",
-          { ownerId: member.id, previousOwnerId: room.ownerId },
-        );
         return true;
       }
-
-      if (!this.#config.controls.allowMemberManagement) return true;
-      const adding = customId === "voice:member:add";
-      await channel.permissionOverwrites.edit(
+      const existing = await this.#repository.findByOwner(
+        this.#guild.id,
         member.id,
-        adding
-          ? { Connect: true, ViewChannel: true }
-          : { Connect: false, ViewChannel: false },
-        { reason: `Temporary room owner ${interaction.user.id}` },
       );
-      if (!adding && member.voice.channelId === room.channelId) {
-        await member.voice.disconnect(
-          `Removed by temporary room owner ${interaction.user.id}`,
-        );
+      if (existing) {
+        await interaction.reply({
+          content: "У выбранного участника уже есть временная комната.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return true;
       }
+      const updated = await this.#repository.update(room.channelId, {
+        ownerId: member.id,
+      });
+      if (!updated) throw new Error("Temporary voice room disappeared");
+      await this.#applyAccess(updated, channel);
+      await this.#ensureRoomControl(updated, channel);
       await interaction.update({
         components: [
           new ContainerBuilder()
             .setAccentColor(0xf2f2ef)
             .addTextDisplayComponents(
               new TextDisplayBuilder().setContent(
-                `## Готово\n<@${member.id}> ${adding ? "получил доступ" : "удалён из комнаты"}.`,
+                `## Комната передана\nНовый владелец: <@${member.id}>.`,
               ),
             ),
         ],
       });
       await this.#logChange(
-        room,
+        updated,
         interaction.user.id,
-        adding ? "Участник добавлен в комнату" : "Участник удалён из комнаты",
-        { memberId: member.id },
+        "Владелец комнаты изменён",
+        { ownerId: member.id, previousOwnerId: room.ownerId },
       );
+      return true;
+    }
+
+    const accessChangeMatch =
+      /^voice:access:(trusted|banned):(add|remove)$/.exec(customId);
+    if (interaction.isUserSelectMenu() && accessChangeMatch) {
+      if (!this.#config.controls.allowMemberManagement) return true;
+      const selected = interaction.users.first();
+      if (!selected || selected.bot || selected.id === room.ownerId) {
+        await interaction.reply({
+          content: "Выберите другого обычного участника.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return true;
+      }
+      const kind = accessChangeMatch[1] as VoiceAccessKind;
+      const action = accessChangeMatch[2] as "add" | "remove";
+      const entries = await this.#accessRepository.list(
+        this.#guild.id,
+        room.ownerId,
+      );
+      const current = entries.find((entry) => entry.subjectId === selected.id);
+      if (
+        action === "add" &&
+        !current &&
+        entries.length >= MAX_ACCESS_PROFILE_ENTRIES
+      ) {
+        await interaction.reply({
+          content: `В доверенных и забаненных уже суммарно ${MAX_ACCESS_PROFILE_ENTRIES} пользователей — это безопасный предел Discord для одной комнаты.`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return true;
+      }
+      if (action === "remove" && current?.kind !== kind) {
+        await interaction.reply({
+          content: `<@${selected.id}> не находится в списке «${accessKindLabel(kind)}».`,
+          flags: MessageFlags.Ephemeral,
+          allowedMentions: { parse: [] },
+        });
+        return true;
+      }
+      await this.#accessRepository.set(
+        this.#guild.id,
+        room.ownerId,
+        selected.id,
+        action === "add" ? kind : null,
+      );
+      await this.#applyAccess(room, channel);
+      const updatedEntries = await this.#accessRepository.list(
+        this.#guild.id,
+        room.ownerId,
+      );
+      await interaction.update({
+        allowedMentions: { parse: [] },
+        components: buildVoiceAccessManager(kind, updatedEntries),
+      });
+      await this.#logAccessChange(room.ownerId, selected.id, kind, action);
       return true;
     }
 
@@ -542,6 +648,7 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
         ownerId: member.id,
         userLimit: this.#config.defaultUserLimit,
       });
+      await this.#applyAccess(created, channel);
       created = await this.#ensureRoomControl(created, channel);
       await member.voice.setChannel(
         channel,
@@ -564,6 +671,37 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
         .catch(() => undefined);
       throw error;
     }
+  }
+
+  async #enforceJoinedRoom(state: VoiceState): Promise<void> {
+    if (!state.channelId || state.id === this.#guild.client.user.id) return;
+    const room = await this.#repository.findByChannel(state.channelId);
+    if (!room || state.id === room.ownerId) return;
+    const entries = await this.#accessRepository.list(
+      this.#guild.id,
+      room.ownerId,
+    );
+    if (
+      !entries.some(
+        (entry) => entry.kind === "banned" && entry.subjectId === state.id,
+      )
+    ) {
+      return;
+    }
+    const member = state.member ?? (await this.#guild.members.fetch(state.id));
+    await member.voice.disconnect(
+      `Banned from temporary rooms owned by ${room.ownerId}`,
+    );
+    await this.#audit.publish({
+      actor: { id: state.id, kind: "user" },
+      category: "bot",
+      discord: true,
+      eventType: "voice.access_blocked",
+      payload: { channelId: room.channelId, ownerId: room.ownerId },
+      subject: { id: state.id, kind: "user" },
+      summary: `<@${state.id}> отключён от <#${room.channelId}>: пользователь находится в списке забаненных владельца <@${room.ownerId}>.`,
+      title: "Вход во временную комнату заблокирован",
+    });
   }
 
   async #cleanupDepartedRoom(
@@ -627,6 +765,32 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
     room: VoiceRoomRecord,
     channel: VoiceChannel,
   ): Promise<void> {
+    const entries = await this.#accessRepository.list(
+      this.#guild.id,
+      room.ownerId,
+    );
+    const trustedIds = entries
+      .filter((entry) => entry.kind === "trusted")
+      .map((entry) => entry.subjectId);
+    const bannedIds = entries
+      .filter((entry) => entry.kind === "banned")
+      .map((entry) => entry.subjectId);
+    const managedMemberIds = new Set([
+      room.ownerId,
+      ...trustedIds,
+      ...bannedIds,
+    ]);
+    await Promise.all(
+      channel.permissionOverwrites.cache
+        .filter(
+          (overwrite) =>
+            overwrite.type === OverwriteType.Member &&
+            !managedMemberIds.has(overwrite.id),
+        )
+        .map((overwrite) =>
+          overwrite.delete("Refreshing persistent voice access profile"),
+        ),
+    );
     const base = {
       Connect: room.locked ? false : null,
       ViewChannel: room.hidden ? false : null,
@@ -639,6 +803,32 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
       Connect: true,
       ViewChannel: true,
     });
+    await Promise.all([
+      ...trustedIds.map((subjectId) =>
+        channel.permissionOverwrites.edit(
+          subjectId,
+          { Connect: true, ViewChannel: true },
+          { reason: `Trusted by temporary room owner ${room.ownerId}` },
+        ),
+      ),
+      ...bannedIds.map((subjectId) =>
+        channel.permissionOverwrites.edit(
+          subjectId,
+          { Connect: false, ViewChannel: false },
+          { reason: `Banned by temporary room owner ${room.ownerId}` },
+        ),
+      ),
+    ]);
+    await Promise.all(
+      bannedIds
+        .map((subjectId) => channel.members.get(subjectId))
+        .filter((member): member is GuildMember => Boolean(member))
+        .map((member) =>
+          member.voice.disconnect(
+            `Banned from temporary rooms owned by ${room.ownerId}`,
+          ),
+        ),
+    );
   }
 
   async #removeLegacyPanel(): Promise<void> {
@@ -775,6 +965,28 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
         ...response,
       });
     }
+  }
+
+  async #logAccessChange(
+    ownerId: string,
+    subjectId: string,
+    kind: VoiceAccessKind,
+    action: "add" | "remove",
+  ): Promise<void> {
+    const added = action === "add";
+    const list = accessKindLabel(kind).toLowerCase();
+    await this.#audit.publish({
+      actor: { id: ownerId, kind: "user" },
+      category: "bot",
+      discord: true,
+      eventType: `voice.access_${kind}_${added ? "added" : "removed"}`,
+      payload: { action, kind, ownerId, subjectId },
+      subject: { id: subjectId, kind: "user" },
+      summary: `<@${subjectId}> ${added ? "добавлен" : "убран"} ${added ? "в" : "из"} список «${list}» владельца <@${ownerId}>. Настройка действует для всех его временных комнат.`,
+      title: added
+        ? `Пользователь добавлен: ${accessKindLabel(kind)}`
+        : `Пользователь убран: ${accessKindLabel(kind)}`,
+    });
   }
 
   async #logChange(

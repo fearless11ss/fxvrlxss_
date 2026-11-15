@@ -36,17 +36,25 @@ The published configuration can independently enable these actions:
 - set a participant limit from 0 to 99, where 0 is unlimited;
 - lock or unlock joining;
 - hide or show the room;
-- grant access to or remove a member;
+- manage personal trusted and banned lists;
 - transfer ownership to a member currently inside the room.
 
 Locking and hiding apply explicit channel overwrites to `@everyone` and
 `Участник`. The owner always receives explicit view and connect permissions.
 Administrators continue to follow Discord's native permission rules.
 
+Access lists belong to the owner, not to an individual room. Trusted members
+can view and join that owner's locked and hidden rooms. Banned members cannot
+join any current or future room owned by that user and are disconnected if
+they are already present when the ban is applied. A member can occupy only one
+of the two lists; adding them to one list automatically moves them out of the
+other. Ownership transfer immediately replaces the channel overwrites with the
+new owner's persistent profile.
+
 ## Recovery and safety
 
-- PostgreSQL is the source of truth for owner, lock, visibility, and user
-  limit.
+- PostgreSQL is the source of truth for owner, lock, visibility, user limit,
+  and per-owner trusted and banned lists.
 - Startup reconciliation reapplies stored state, restores or updates the
   in-room control message, deletes empty managed rooms, and removes records for
   missing managed channels.

@@ -186,6 +186,27 @@ export const temporaryVoiceRooms = pgTable(
   ],
 );
 
+export const voiceOwnerAccess = pgTable(
+  "voice_owner_access",
+  {
+    guildId: text("guild_id").notNull(),
+    ownerId: text("owner_id").notNull(),
+    subjectId: text("subject_id").notNull(),
+    kind: text("kind").$type<"trusted" | "banned">().notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.guildId, table.ownerId, table.subjectId],
+    }),
+    index("voice_owner_access_profile_idx").on(
+      table.guildId,
+      table.ownerId,
+      table.kind,
+    ),
+  ],
+);
+
 export const adminAccounts = pgTable("admin_accounts", {
   id: uuid("id").defaultRandom().primaryKey(),
   username: text("username").notNull().unique(),

@@ -44,6 +44,7 @@ import { TicketModule } from "./ticket-module.js";
 import type { TicketPublicationRepository } from "./ticket-publication.js";
 import { TicketPublicationWorker } from "./ticket-publication.js";
 import type { TicketRepository } from "./ticket-repository.js";
+import type { VoiceAccessRepository } from "./voice-access-repository.js";
 import { VoiceRoomModule } from "./voice-room-module.js";
 import type { VoicePublicationRepository } from "./voice-publication.js";
 import { VoicePublicationWorker } from "./voice-publication.js";
@@ -65,6 +66,7 @@ export interface GuildCoreOptions {
   readonly persistentWriters?: readonly AuditWriter[];
   readonly ticketPublicationRepository?: TicketPublicationRepository;
   readonly ticketRepository?: TicketRepository;
+  readonly voiceAccessRepository?: VoiceAccessRepository;
   readonly voicePublicationRepository?: VoicePublicationRepository;
   readonly voiceRoomRepository?: VoiceRoomRepository;
 }
@@ -277,15 +279,17 @@ export async function startGuildCore(
           repository: options.ticketPublicationRepository,
         })
       : undefined;
-  const voiceModule = options.voiceRoomRepository
-    ? new VoiceRoomModule({
-        audit,
-        guild,
-        logger,
-        repository: options.voiceRoomRepository,
-        resources,
-      })
-    : undefined;
+  const voiceModule =
+    options.voiceAccessRepository && options.voiceRoomRepository
+      ? new VoiceRoomModule({
+          accessRepository: options.voiceAccessRepository,
+          audit,
+          guild,
+          logger,
+          repository: options.voiceRoomRepository,
+          resources,
+        })
+      : undefined;
   const voicePublicationWorker =
     voiceModule && options.voicePublicationRepository
       ? new VoicePublicationWorker({
