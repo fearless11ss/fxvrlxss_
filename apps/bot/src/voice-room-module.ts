@@ -259,6 +259,19 @@ function limitModal(userLimit: number): ModalBuilder {
     );
 }
 
+export async function runVoiceRoomCreationSteps<Room>(steps: {
+  readonly applyAccess: () => Promise<void>;
+  readonly moveOwner: () => Promise<void>;
+  readonly publishLifecycle: (room: Room) => Promise<void>;
+  readonly sendControl: () => Promise<Room>;
+}): Promise<Room> {
+  await steps.applyAccess();
+  await steps.moveOwner();
+  const room = await steps.sendControl();
+  await steps.publishLifecycle(room);
+  return room;
+}
+
 export class VoiceRoomModule implements VoiceConfigurationApplier {
   readonly #accessRepository: VoiceAccessRepository;
   readonly #audit: AuditBus;
@@ -691,7 +704,7 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
     });
     let created: VoiceRoomRecord | undefined;
     try {
-      created = await this.#repository.create({
+      const persisted = await this.#repository.create({
         channelId: channel.id,
         controlMessageId: null,
         guildId: this.#guild.id,
@@ -700,26 +713,33 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
         ownerId: member.id,
         userLimit: this.#config.defaultUserLimit,
       });
-      await this.#applyAccess(created, channel);
-      created = await this.#ensureRoomControl(created, channel, true);
-      await member.voice.setChannel(
-        channel,
-        "fxvrlxss_ temporary room created",
-      );
-      const snapshot = await this.#roomSnapshot(created, channel);
-      await this.#audit.publish({
-        actor: { id: member.id, kind: "user" },
-        category: "server",
-        discord: true,
-        eventType: "voice.room_created",
-        payload: { room: snapshot },
-        subject: {
-          id: channel.id,
-          kind: "channel",
-          label: channel.name,
+      created = persisted;
+      created = await runVoiceRoomCreationSteps({
+        applyAccess: () => this.#applyAccess(persisted, channel),
+        moveOwner: async () => {
+          await member.voice.setChannel(
+            channel,
+            "fxvrlxss_ temporary room created",
+          );
         },
-        summary: describeVoiceRoomLifecycle("created", snapshot),
-        title: "Временная комната создана",
+        publishLifecycle: async (room) => {
+          const snapshot = await this.#roomSnapshot(room, channel);
+          await this.#audit.publish({
+            actor: { id: member.id, kind: "user" },
+            category: "server",
+            discord: true,
+            eventType: "voice.room_created",
+            payload: { room: snapshot },
+            subject: {
+              id: channel.id,
+              kind: "channel",
+              label: channel.name,
+            },
+            summary: describeVoiceRoomLifecycle("created", snapshot),
+            title: "Временная комната создана",
+          });
+        },
+        sendControl: () => this.#ensureRoomControl(persisted, channel, true),
       });
     } catch (error) {
       if (created) await this.#repository.remove(channel.id);

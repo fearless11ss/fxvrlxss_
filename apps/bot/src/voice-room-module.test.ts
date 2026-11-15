@@ -6,6 +6,7 @@ import {
   buildVoiceAccessManager,
   buildVoiceMemberOverwritePlan,
   buildVoiceRoomControls,
+  runVoiceRoomCreationSteps,
 } from "./voice-room-module.js";
 import type { VoiceAccessEntry } from "./voice-access-repository.js";
 import type { VoiceRoomRecord } from "./voice-room-repository.js";
@@ -21,6 +22,31 @@ const room: VoiceRoomRecord = {
 };
 
 describe("temporary voice Components V2", () => {
+  it("moves the owner before sending the room control panel", async () => {
+    const order: string[] = [];
+
+    await runVoiceRoomCreationSteps({
+      applyAccess: () => {
+        order.push("access");
+        return Promise.resolve();
+      },
+      moveOwner: () => {
+        order.push("move");
+        return Promise.resolve();
+      },
+      publishLifecycle: () => {
+        order.push("audit");
+        return Promise.resolve();
+      },
+      sendControl: () => {
+        order.push("control");
+        return Promise.resolve(room);
+      },
+    });
+
+    expect(order).toEqual(["access", "move", "control", "audit"]);
+  });
+
   it("builds an in-room panel with every enabled owner action", () => {
     const controls = buildVoiceRoomControls(
       room,

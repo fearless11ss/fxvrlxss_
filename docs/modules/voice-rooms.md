@@ -18,7 +18,9 @@ children; it is not a separate channel or nested category.
 
 1. A member joins `создать-комнату`.
 2. The bot creates one voice channel in `ГОЛОСОВЫЕ`, stores its state in
-   PostgreSQL, and moves the member into it.
+   PostgreSQL, applies the owner's persistent access lists, and moves the member
+   into it before sending the control panel. This keeps panel delivery outside
+   the member's critical connection path while Discord establishes RTC.
 3. If the member already owns a room, the bot moves them back to that room
    instead of creating a duplicate.
 4. The bot posts a persistent Components V2 control panel in the text chat of
