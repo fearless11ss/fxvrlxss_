@@ -9,6 +9,8 @@ import { DatabaseAutomodPublicationRepository } from "./database-automod-publica
 import { DatabaseAuditWriter } from "./database-audit.js";
 import { DatabaseGuildResourceCatalogWriter } from "./database-guild-resource-catalog.js";
 import { DatabaseMessageArchiveReader } from "./database-message-archive.js";
+import { DatabaseModerationPublicationRepository } from "./database-moderation-publication.js";
+import { DatabaseModerationRepository } from "./database-moderation-repository.js";
 import { DatabaseTicketPublicationRepository } from "./database-ticket-publication.js";
 import { DatabaseTicketRepository } from "./database-ticket-repository.js";
 import { DatabaseVoiceAccessRepository } from "./database-voice-access-repository.js";
@@ -103,6 +105,14 @@ export function createBotRuntime(config: ResolvedBotConfig): BotRuntime {
                           databaseState.database,
                         ),
                       messageArchiveReader: new DatabaseMessageArchiveReader(
+                        databaseState.database,
+                      ),
+                      moderationPublicationRepository:
+                        new DatabaseModerationPublicationRepository(
+                          databaseState.database,
+                          config.DISCORD_GUILD_ID,
+                        ),
+                      moderationRepository: new DatabaseModerationRepository(
                         databaseState.database,
                       ),
                       ticketPublicationRepository:

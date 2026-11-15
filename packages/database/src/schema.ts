@@ -109,19 +109,43 @@ export const moderationCases = pgTable(
   "moderation_cases",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    number: serial("number").notNull(),
     guildId: text("guild_id").notNull(),
     userId: text("user_id").notNull(),
+    moderatorId: text("moderator_id").notNull(),
     status: moderationCaseStatus("status").default("open").notNull(),
+    requestedAction: text("requested_action")
+      .$type<"warn" | "timeout" | "kick" | "ban">()
+      .notNull(),
+    appliedAction: text("applied_action")
+      .$type<"warn" | "timeout" | "kick" | "ban">()
+      .notNull(),
     points: integer("points").default(0).notNull(),
     summary: text("summary").notNull(),
     evidence: jsonb("evidence").notNull(),
+    timeoutMinutes: integer("timeout_minutes"),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
+    appealOutcome: text("appeal_outcome").$type<
+      "approved" | "denied" | "withdrawn"
+    >(),
+    appealReason: text("appeal_reason"),
+    appealResolvedAt: timestamp("appeal_resolved_at", { withTimezone: true }),
+    appealResolvedById: text("appeal_resolved_by_id"),
+    resolvedById: text("resolved_by_id"),
+    resolutionReason: text("resolution_reason"),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
     ...timestamps,
   },
   (table) => [
+    uniqueIndex("moderation_cases_number_unique").on(table.number),
     index("moderation_cases_user_idx").on(table.guildId, table.userId),
     index("moderation_cases_status_idx").on(table.status),
+    index("moderation_cases_active_points_idx").on(
+      table.guildId,
+      table.userId,
+      table.status,
+      table.expiresAt,
+    ),
   ],
 );
 
@@ -138,6 +162,7 @@ export const tickets = pgTable(
     status: ticketStatus("status").default("open").notNull(),
     subject: text("subject").notNull(),
     description: text("description").notNull(),
+    moderationCaseNumber: integer("moderation_case_number"),
     controlMessageId: text("control_message_id"),
     participantIds: jsonb("participant_ids")
       .$type<string[]>()

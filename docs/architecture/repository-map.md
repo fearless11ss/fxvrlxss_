@@ -31,6 +31,8 @@ assets/         User-provided visual references
   [server structure](../discord/server-structure.md).
 - Automod ownership is defined by the
   [automoderation module](../modules/automod.md).
+- Manual sanctions, points, and appeals are defined by the
+  [manual moderation module](../modules/moderation.md).
 - Ticket ownership and lifecycle are defined by the
   [ticket module](../modules/tickets.md).
 - Temporary room ownership and cleanup are defined by the

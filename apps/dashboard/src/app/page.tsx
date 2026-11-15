@@ -6,6 +6,7 @@ import { logoutAction } from "./logout-action";
 const navigation = [
   ["Обзор", "/"],
   ["Автомодерация", "/automod"],
+  ["Модерация", "/moderation"],
   ["Тикеты", "/tickets"],
   ["Голосовые", "/voice"],
   ["Правила и навигация", "rules"],

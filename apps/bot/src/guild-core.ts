@@ -41,6 +41,10 @@ import {
   type GuildResourceCatalogWriter,
 } from "./guild-resource-catalog.js";
 import type { MessageArchiveReader } from "./message-archive.js";
+import { ModerationModule } from "./moderation-module.js";
+import type { ModerationPublicationRepository } from "./moderation-publication.js";
+import { ModerationPublicationWorker } from "./moderation-publication.js";
+import type { ModerationRepository } from "./moderation-repository.js";
 import { TicketModule } from "./ticket-module.js";
 import type { TicketPublicationRepository } from "./ticket-publication.js";
 import { TicketPublicationWorker } from "./ticket-publication.js";
@@ -64,6 +68,8 @@ export interface GuildCoreOptions {
   readonly guildResourceCatalogWriter?: GuildResourceCatalogWriter;
   readonly logger: Logger;
   readonly messageArchiveReader?: MessageArchiveReader;
+  readonly moderationPublicationRepository?: ModerationPublicationRepository;
+  readonly moderationRepository?: ModerationRepository;
   readonly persistentWriters?: readonly AuditWriter[];
   readonly ticketPublicationRepository?: TicketPublicationRepository;
   readonly ticketRepository?: TicketRepository;
@@ -305,11 +311,28 @@ export async function startGuildCore(
     [...(options.persistentWriters ?? []), discordWriter],
     logger,
   );
+  const moderationModule = options.moderationRepository
+    ? new ModerationModule({
+        audit,
+        guild,
+        logger,
+        repository: options.moderationRepository,
+      })
+    : undefined;
+  const moderationPublicationWorker =
+    moderationModule && options.moderationPublicationRepository
+      ? new ModerationPublicationWorker({
+          applier: moderationModule,
+          logger,
+          repository: options.moderationPublicationRepository,
+        })
+      : undefined;
   const ticketModule = options.ticketRepository
     ? new TicketModule({
         audit,
         guild,
         logger,
+        ...(moderationModule ? { moderationAppeals: moderationModule } : {}),
         repository: options.ticketRepository,
         resources,
       })
@@ -345,6 +368,8 @@ export async function startGuildCore(
 
   await registerStatusCommand(guild);
   await publicationWorker?.start();
+  await moderationModule?.start();
+  await moderationPublicationWorker?.start();
   await ticketModule?.start();
   await ticketPublicationWorker?.start();
   await voiceModule?.start();
@@ -935,6 +960,7 @@ export async function startGuildCore(
 
   safeOn(Events.InteractionCreate, async (interaction) => {
     if (interaction.guildId !== guildId) return;
+    if (await moderationModule?.handleInteraction(interaction)) return;
     if (await ticketModule?.handleInteraction(interaction)) return;
     if (await voiceModule?.handleInteraction(interaction)) return;
     const isStatusCommand =
@@ -985,8 +1011,10 @@ export async function startGuildCore(
     async stop() {
       await voicePublicationWorker?.stop();
       await ticketPublicationWorker?.stop();
+      await moderationPublicationWorker?.stop();
       await voiceModule?.stop();
       await ticketModule?.stop();
+      await moderationModule?.stop();
       await publicationWorker?.stop();
       await eventGate.close();
       await audit.publish({

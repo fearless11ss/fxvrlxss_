@@ -43,6 +43,15 @@ its stable key.
 7. Optional inactivity handling closes untouched tickets after the configured
    number of hours. A value of `0` disables automatic closing.
 
+### Punishment appeals
+
+An appeal requires the number of an active moderation case belonging to the
+ticket author. The linked case number appears on the ticket card. Staff close
+the appeal with an explicit approved or denied result; author closure records a
+withdrawal. Approved appeals resolve the case and reverse a timeout or ban when
+possible, while denied and withdrawn appeals leave its points active. An appeal
+decision is final, so a linked ticket cannot be reopened.
+
 ## Invariants
 
 - A member cannot open two active tickets of the same route.
@@ -63,6 +72,7 @@ its stable key.
   embed data into readable text instead of raw JSON.
 - Dashboard changes are immutable drafts. Only the bot acknowledges a queued
   version as published after it updates the pinned Discord panel.
+- One moderation case can receive at most one appeal result.
 
 ## Ownership
 
@@ -93,4 +103,4 @@ mention, and raw numeric ID. Discord changes the mention to `#неизвестн
 deletion, while the saved ID remains searchable.
 
 See [the server structure](../discord/server-structure.md) and
-[the architecture overview](../architecture/overview.md).
+[the manual moderation module](moderation.md).

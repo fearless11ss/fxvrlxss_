@@ -16,6 +16,10 @@
       "types": "./src/moderation.ts",
       "import": "./dist/moderation.js"
     },
+    "./moderation-config": {
+      "types": "./src/moderation-config.ts",
+      "import": "./dist/moderation-config.js"
+    },
     "./ticket-config": {
       "types": "./src/ticket-config.ts",
       "import": "./dist/ticket-config.js"

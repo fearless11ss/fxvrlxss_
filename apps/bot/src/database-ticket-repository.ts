@@ -22,6 +22,7 @@ function record(row: typeof tickets.$inferSelect): TicketRecord {
     controlMessageId: row.controlMessageId,
     description: row.description,
     id: row.id,
+    moderationCaseNumber: row.moderationCaseNumber,
     number: row.number,
     participantIds: row.participantIds,
     status: row.status,
@@ -42,6 +43,7 @@ export class DatabaseTicketRepository implements TicketRepository {
     readonly description: string;
     readonly guildId: string;
     readonly maxOpenTickets: number;
+    readonly moderationCaseNumber?: number;
     readonly subject: string;
     readonly type: string;
   }): Promise<TicketReservation> {
@@ -82,6 +84,7 @@ export class DatabaseTicketRepository implements TicketRepository {
           channelId: `pending:${randomUUID()}`,
           description: input.description,
           guildId: input.guildId,
+          moderationCaseNumber: input.moderationCaseNumber,
           subject: input.subject,
           type: input.type,
         })

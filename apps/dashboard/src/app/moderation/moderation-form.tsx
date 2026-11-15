@@ -1,0 +1,191 @@
+"use client";
+
+import type { ModerationConfig } from "@fxvrlxss/domain/moderation-config";
+import { useActionState } from "react";
+
+import { ResourcePicker } from "../resource-picker";
+import { saveModerationDraft, type ModerationActionState } from "./actions";
+import type { ModerationRoleOption } from "./data";
+
+const initialState: ModerationActionState = {};
+
+const actionFields = [
+  ["warn", "Предупреждение", "Фиксация нарушения без ограничения доступа."],
+  [
+    "timeout",
+    "Тайм-аут",
+    "Временный запрет отправки сообщений и входа в войс.",
+  ],
+  ["kick", "Кик", "Незамедлительное исключение с сервера."],
+  ["ban", "Бан", "Полная блокировка участника на сервере."],
+] as const;
+
+export function ModerationForm({
+  config,
+  roles,
+}: Readonly<{
+  config: ModerationConfig;
+  roles: readonly ModerationRoleOption[];
+}>) {
+  const [state, action, pending] = useActionState(
+    saveModerationDraft,
+    initialState,
+  );
+  return (
+    <form action={action} className="voiceForm moderationForm">
+      <section className="automodMaster" aria-label="Состояние модуля">
+        <div>
+          <label className="switchLine">
+            <input
+              defaultChecked={config.enabled}
+              name="enabled"
+              type="checkbox"
+            />
+            <span>Модуль включён</span>
+          </label>
+          <p>Отключение запрещает создание новых дел через Discord.</p>
+        </div>
+        <ResourcePicker
+          emptyMessage="Роли ещё не синхронизированы с Discord."
+          kind="role"
+          label="Роли с доступом к ручной модерации"
+          name="staffRoleIds"
+          options={roles}
+          value={config.staffRoleIds}
+        />
+      </section>
+
+      <section className="voiceSettings" aria-labelledby="moderation-general">
+        <header className="sectionHeader">
+          <p className="sectionPath">Сроки</p>
+          <h2 id="moderation-general">Основные параметры</h2>
+        </header>
+        <div className="voiceSettingsGrid">
+          <label>
+            <span>Сгорание баллов, дней</span>
+            <input
+              defaultValue={config.pointExpiryDays}
+              max="3650"
+              min="1"
+              name="pointExpiryDays"
+              type="number"
+            />
+          </label>
+          <label>
+            <span>Тайм-аут по умолчанию, минут</span>
+            <input
+              defaultValue={config.defaultTimeoutMinutes}
+              max="40320"
+              min="1"
+              name="defaultTimeoutMinutes"
+              type="number"
+            />
+          </label>
+        </div>
+      </section>
+
+      <section className="voiceControls" aria-labelledby="moderation-actions">
+        <header className="sectionHeader">
+          <p className="sectionPath">Нарушения</p>
+          <h2 id="moderation-actions">Баллы за действие</h2>
+        </header>
+        <div className="voiceControlLedger moderationLedger">
+          {actionFields.map(([key, label, description], index) => (
+            <label className="voiceControlRow moderationPointRow" key={key}>
+              <span className="voiceControlIndex">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <span>
+                <strong>{label}</strong>
+                <small>{description}</small>
+              </span>
+              <input
+                defaultValue={config.actionPoints[key]}
+                max="100"
+                min="0"
+                name={`points-${key}`}
+                type="number"
+              />
+            </label>
+          ))}
+        </div>
+      </section>
+
+      <section
+        className="voiceControls"
+        aria-labelledby="moderation-thresholds"
+      >
+        <header className="sectionHeader">
+          <p className="sectionPath">Эскалация</p>
+          <h2 id="moderation-thresholds">Автоматические пороги</h2>
+        </header>
+        <div className="moderationThresholdGrid">
+          <article>
+            <label className="switchLine">
+              <input
+                defaultChecked={config.thresholds.timeout.enabled}
+                name="threshold-timeout-enabled"
+                type="checkbox"
+              />
+              <span>Тайм-аут</span>
+            </label>
+            <label>
+              <span>Баллов</span>
+              <input
+                defaultValue={config.thresholds.timeout.points}
+                min="1"
+                name="threshold-timeout-points"
+                type="number"
+              />
+            </label>
+            <label>
+              <span>Срок, минут</span>
+              <input
+                defaultValue={config.thresholds.timeout.timeoutMinutes}
+                max="40320"
+                min="1"
+                name="threshold-timeout-minutes"
+                type="number"
+              />
+            </label>
+          </article>
+          {(["kick", "ban"] as const).map((key) => (
+            <article key={key}>
+              <label className="switchLine">
+                <input
+                  defaultChecked={config.thresholds[key].enabled}
+                  name={`threshold-${key}-enabled`}
+                  type="checkbox"
+                />
+                <span>{key === "kick" ? "Кик" : "Бан"}</span>
+              </label>
+              <label>
+                <span>Баллов</span>
+                <input
+                  defaultValue={config.thresholds[key].points}
+                  min="1"
+                  name={`threshold-${key}-points`}
+                  type="number"
+                />
+              </label>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <footer className="formFooter">
+        <div aria-live="polite">
+          {state.error ? (
+            <span className="formError">{state.error}</span>
+          ) : null}
+          {state.message ? (
+            <span className="formSuccess">{state.message}</span>
+          ) : null}
+        </div>
+        <button disabled={pending} type="submit">
+          {pending ? "Сохранение…" : "Сохранить черновик"}
+        </button>
+      </footer>
+    </form>
+  );
+}

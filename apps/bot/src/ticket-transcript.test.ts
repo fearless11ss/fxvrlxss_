@@ -17,6 +17,7 @@ const ticket: TicketRecord = {
   controlMessageId: "message-control",
   description: "Подробности обращения",
   id: "ticket-1",
+  moderationCaseNumber: null,
   number: 7,
   participantIds: [],
   status: "closed",

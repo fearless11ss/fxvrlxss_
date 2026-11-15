@@ -17,6 +17,7 @@ const ticket: TicketRecord = {
   controlMessageId: "message-1",
   description: "Подробное описание обращения",
   id: "ticket-1",
+  moderationCaseNumber: null,
   number: 42,
   participantIds: [],
   status: "open",
@@ -65,6 +66,19 @@ describe("ticket Components V2", () => {
     expect(serialized).toContain("ticket:close");
   });
 
+  it("shows the linked moderation case in an appeal ticket", () => {
+    const controls = buildTicketControls(
+      {
+        ...ticket,
+        moderationCaseNumber: 17,
+        type: "punishment-appeal",
+      },
+      defaultTicketConfig,
+    )[0]?.toJSON();
+
+    expect(JSON.stringify(controls)).toContain("Дело модерации: **#0017**");
+  });
+
   it("offers reopening and safe channel deletion for a closed ticket", () => {
     const controls = buildTicketControls(
       { ...ticket, status: "closed" },
@@ -75,6 +89,22 @@ describe("ticket Components V2", () => {
     expect(serialized).toContain("ticket:reopen");
     expect(serialized).toContain("ticket:delete");
     expect(serialized).not.toContain("ticket:claim");
+  });
+
+  it("does not reopen an appeal after its decision", () => {
+    const controls = buildTicketControls(
+      {
+        ...ticket,
+        moderationCaseNumber: 17,
+        status: "closed",
+        type: "punishment-appeal",
+      },
+      defaultTicketConfig,
+    )[0]?.toJSON();
+    const serialized = JSON.stringify(controls);
+
+    expect(serialized).not.toContain("ticket:reopen");
+    expect(serialized).toContain("ticket:delete");
   });
 
   it("does not offer Discord actions after the channel is deleted", () => {

@@ -8,6 +8,7 @@ export interface TicketRecord {
   readonly controlMessageId: string | null;
   readonly description: string;
   readonly id: string;
+  readonly moderationCaseNumber: number | null;
   readonly number: number;
   readonly participantIds: readonly string[];
   readonly status: TicketState;
@@ -61,6 +62,7 @@ export interface TicketRepository {
     readonly description: string;
     readonly guildId: string;
     readonly maxOpenTickets: number;
+    readonly moderationCaseNumber?: number;
     readonly subject: string;
     readonly type: string;
   }): Promise<TicketReservation>;

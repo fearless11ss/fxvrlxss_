@@ -32,6 +32,10 @@ import type { Logger } from "pino";
 
 import type { AuditBus } from "./audit.js";
 import type { GuildResources } from "./guild-resources.js";
+import type {
+  ModerationAppealHandler,
+  ModerationAppealOutcome,
+} from "./moderation-appeals.js";
 import type { TicketConfigurationApplier } from "./ticket-publication.js";
 import type {
   TicketRecord,
@@ -127,7 +131,11 @@ export function buildTicketControls(
   const closed = ticket.status === "closed";
   const row = new ActionRowBuilder<ButtonBuilder>();
   if (closed) {
-    if (config.allowReopen && !ticket.channelDeletedAt) {
+    if (
+      config.allowReopen &&
+      !ticket.channelDeletedAt &&
+      !ticket.moderationCaseNumber
+    ) {
       row.addComponents(
         new ButtonBuilder()
           .setCustomId("ticket:reopen")
@@ -180,10 +188,15 @@ export function buildTicketControls(
         [
           `## Тикет #${ticketNumber(ticket.number)} · ${escapeMarkdown(type?.label ?? ticket.type)}`,
           `Автор: <@${ticket.authorId}>`,
+          ticket.moderationCaseNumber
+            ? `Дело модерации: **#${ticketNumber(ticket.moderationCaseNumber)}**`
+            : undefined,
           `Статус: ${status}`,
           `**${escapeMarkdown(ticket.subject)}**`,
           escapeMarkdown(ticket.description),
-        ].join("\n"),
+        ]
+          .filter((line): line is string => Boolean(line))
+          .join("\n"),
       ),
     );
   if (row.components.length > 0) container.addActionRowComponents(row);
@@ -191,7 +204,7 @@ export function buildTicketControls(
 }
 
 function openTicketModal(type: TicketTypeKey, label: string): ModalBuilder {
-  return new ModalBuilder()
+  const modal = new ModalBuilder()
     .setCustomId(`${OPEN_MODAL_PREFIX}${type}`)
     .setTitle(label)
     .addLabelComponents(
@@ -218,10 +231,26 @@ function openTicketModal(type: TicketTypeKey, label: string): ModalBuilder {
             .setStyle(TextInputStyle.Paragraph),
         ),
     );
+  if (type === "punishment-appeal") {
+    modal.addLabelComponents(
+      new LabelBuilder()
+        .setLabel("Номер дела")
+        .setDescription("Укажите номер без знака #, например 42.")
+        .setTextInputComponent(
+          new TextInputBuilder()
+            .setCustomId("caseNumber")
+            .setMaxLength(10)
+            .setMinLength(1)
+            .setRequired(true)
+            .setStyle(TextInputStyle.Short),
+        ),
+    );
+  }
+  return modal;
 }
 
-function closeTicketModal(): ModalBuilder {
-  return new ModalBuilder()
+function closeTicketModal(ticket: TicketRecord, staff: boolean): ModalBuilder {
+  const modal = new ModalBuilder()
     .setCustomId(CLOSE_MODAL_ID)
     .setTitle("Закрыть тикет")
     .addLabelComponents(
@@ -236,6 +265,22 @@ function closeTicketModal(): ModalBuilder {
             .setStyle(TextInputStyle.Paragraph),
         ),
     );
+  if (ticket.moderationCaseNumber && staff) {
+    modal.addLabelComponents(
+      new LabelBuilder()
+        .setLabel("Решение по обжалованию")
+        .setDescription("Введите: удовлетворено или отклонено.")
+        .setTextInputComponent(
+          new TextInputBuilder()
+            .setCustomId("appealOutcome")
+            .setMaxLength(15)
+            .setMinLength(9)
+            .setRequired(true)
+            .setStyle(TextInputStyle.Short),
+        ),
+    );
+  }
+  return modal;
 }
 
 function deleteTicketChannelModal(ticket: TicketRecord): ModalBuilder {
@@ -310,6 +355,7 @@ export class TicketModule implements TicketConfigurationApplier {
   readonly #audit: AuditBus;
   readonly #guild: Guild;
   readonly #logger: Logger;
+  readonly #moderationAppeals: ModerationAppealHandler | undefined;
   readonly #repository: TicketRepository;
   readonly #resources: GuildResources;
   #config: TicketConfig = defaultTicketConfig;
@@ -319,12 +365,14 @@ export class TicketModule implements TicketConfigurationApplier {
     readonly audit: AuditBus;
     readonly guild: Guild;
     readonly logger: Logger;
+    readonly moderationAppeals?: ModerationAppealHandler;
     readonly repository: TicketRepository;
     readonly resources: GuildResources;
   }) {
     this.#audit = options.audit;
     this.#guild = options.guild;
     this.#logger = options.logger;
+    this.#moderationAppeals = options.moderationAppeals;
     this.#repository = options.repository;
     this.#resources = options.resources;
     this.#config = {
@@ -446,7 +494,7 @@ export class TicketModule implements TicketConfigurationApplier {
         });
         return true;
       }
-      await interaction.showModal(closeTicketModal());
+      await interaction.showModal(closeTicketModal(ticket, staff));
       return true;
     }
 
@@ -458,11 +506,36 @@ export class TicketModule implements TicketConfigurationApplier {
         });
         return true;
       }
+      let appealOutcome: ModerationAppealOutcome | undefined;
+      if (ticket.moderationCaseNumber) {
+        if (staff) {
+          const value = interaction.fields
+            .getTextInputValue("appealOutcome")
+            .trim()
+            .toLocaleLowerCase("ru-RU");
+          appealOutcome =
+            value === "удовлетворено"
+              ? "approved"
+              : value === "отклонено"
+                ? "denied"
+                : undefined;
+          if (!appealOutcome) {
+            await interaction.reply({
+              content: "Введите решение: удовлетворено или отклонено.",
+              flags: MessageFlags.Ephemeral,
+            });
+            return true;
+          }
+        } else {
+          appealOutcome = "withdrawn";
+        }
+      }
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       await this.#closeTicket(
         ticket,
         interaction.fields.getTextInputValue("reason"),
         interaction.user.id,
+        appealOutcome,
       );
       await interaction.editReply("Тикет закрыт, транскрипт сохранён.");
       return true;
@@ -546,6 +619,14 @@ export class TicketModule implements TicketConfigurationApplier {
 
     if (interaction.isButton() && customId === "ticket:reopen") {
       if (!(await this.#requireStaff(interaction, staff))) return true;
+      if (ticket.moderationCaseNumber) {
+        await interaction.reply({
+          content:
+            "Решение по обжалованию окончательное. Создайте обычный тикет, если требуется дополнительное рассмотрение.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return true;
+      }
       const updated = await this.#repository.reopen(ticket.channelId);
       if (!updated) {
         await interaction.reply({
@@ -717,11 +798,31 @@ export class TicketModule implements TicketConfigurationApplier {
       return;
     }
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const moderationCaseNumber =
+      type.key === "punishment-appeal"
+        ? Number(interaction.fields.getTextInputValue("caseNumber"))
+        : undefined;
+    if (
+      moderationCaseNumber !== undefined &&
+      (!Number.isInteger(moderationCaseNumber) ||
+        moderationCaseNumber < 1 ||
+        !this.#moderationAppeals ||
+        !(await this.#moderationAppeals.canAppeal(
+          moderationCaseNumber,
+          interaction.user.id,
+        )))
+    ) {
+      await interaction.editReply(
+        "Активное дело с таким номером не найдено или оно принадлежит другому участнику.",
+      );
+      return;
+    }
     const reservation = await this.#repository.reserve({
       authorId: interaction.user.id,
       description: interaction.fields.getTextInputValue("description"),
       guildId: this.#guild.id,
       maxOpenTickets: this.#config.maxOpenTicketsPerUser,
+      ...(moderationCaseNumber === undefined ? {} : { moderationCaseNumber }),
       subject: interaction.fields.getTextInputValue("subject"),
       type: type.key,
     });
@@ -779,6 +880,17 @@ export class TicketModule implements TicketConfigurationApplier {
         flags: MessageFlags.IsComponentsV2,
       });
       await this.#repository.setControlMessage(channel.id, control.id);
+      if (
+        moderationCaseNumber !== undefined &&
+        !(await this.#moderationAppeals?.beginAppeal(
+          moderationCaseNumber,
+          interaction.user.id,
+        ))
+      ) {
+        throw new Error(
+          `Moderation case #${moderationCaseNumber} could not begin appeal`,
+        );
+      }
       await interaction.editReply(`Тикет создан: <#${channel.id}>`);
       await this.#audit.publish({
         actor: { id: interaction.user.id, kind: "user" },
@@ -879,6 +991,7 @@ export class TicketModule implements TicketConfigurationApplier {
     ticket: TicketRecord,
     reason: string,
     actorId?: string,
+    appealOutcome?: ModerationAppealOutcome,
   ): Promise<void> {
     if (!ACTIVE_STATES.has(ticket.status)) return;
     const channel = await this.#textChannel(ticket.channelId);
@@ -936,6 +1049,42 @@ export class TicketModule implements TicketConfigurationApplier {
       summary: `Закрыт тикет #${ticketNumber(ticket.number)}. Причина: ${escapeMarkdown(reason)}.`,
       title: "Тикет закрыт",
     });
+    if (closed.moderationCaseNumber && this.#moderationAppeals) {
+      try {
+        const finished = await this.#moderationAppeals.finishAppeal({
+          actorId: actorId ?? this.#guild.client.user.id,
+          caseNumber: closed.moderationCaseNumber,
+          outcome: appealOutcome ?? "withdrawn",
+          reason,
+        });
+        if (!finished) {
+          throw new Error("Связанное дело уже не находится на обжаловании");
+        }
+      } catch (error) {
+        this.#logger.error(
+          {
+            error,
+            moderationCaseNumber: closed.moderationCaseNumber,
+            ticketNumber: closed.number,
+          },
+          "moderation appeal resolution failed",
+        );
+        await this.#audit.publish({
+          category: "bot",
+          discord: true,
+          eventType: "moderation.appeal_resolution_failed",
+          payload: {
+            error: String(error),
+            moderationCaseNumber: closed.moderationCaseNumber,
+            ticketNumber: closed.number,
+          },
+          severity: "critical",
+          subject: { id: closed.channelId, kind: "channel" },
+          summary: `Тикет #${ticketNumber(closed.number)} закрыт, но не удалось завершить обжалование по делу #${ticketNumber(closed.moderationCaseNumber)}. Требуется ручная проверка.`,
+          title: "Ошибка завершения обжалования",
+        });
+      }
+    }
   }
 
   async #publishTranscript(

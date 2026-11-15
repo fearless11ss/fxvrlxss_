@@ -57,6 +57,13 @@
       "when": 1794783600000,
       "tag": "0007_voice_owner_access",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794790800000,
+      "tag": "0008_manual_moderation",
+      "breakpoints": true
     }
   ]
 }

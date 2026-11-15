@@ -1427,6 +1427,47 @@ textarea:focus-visible {
   margin-top: 42px;
 }
 
+.moderationPointRow {
+  grid-template-columns: 34px minmax(0, 1fr) 90px;
+}
+
+.moderationPointRow input {
+  width: 90px;
+  min-height: 44px;
+  padding: 10px 12px;
+}
+
+.moderationThresholdGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-left: 1px solid var(--steel);
+}
+
+.moderationThresholdGrid article {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+  min-height: 230px;
+  padding: 24px;
+  border-right: 1px solid var(--steel);
+  border-bottom: 1px solid var(--steel);
+}
+
+.moderationThresholdGrid .switchLine {
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--steel);
+  color: var(--bone);
+  font-weight: 600;
+}
+
+.moderationThresholdGrid input[type="checkbox"] {
+  width: 17px;
+  min-height: 17px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--bone);
+}
+
 @media (max-width: 1240px) {
   .mobilePublication {
     display: flex;
@@ -1439,7 +1480,8 @@ textarea:focus-visible {
   .ticketSettingsGrid,
   .ticketTypeGrid,
   .voiceSettingsGrid,
-  .voiceControlLedger {
+  .voiceControlLedger,
+  .moderationThresholdGrid {
     grid-template-columns: 1fr;
   }
 
