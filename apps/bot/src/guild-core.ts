@@ -216,6 +216,33 @@ function isTemporaryVoiceChannel(
   );
 }
 
+export function isManagedTicketChannelShape(
+  channel: {
+    readonly id: string;
+    readonly name: string;
+    readonly parentId?: string | null;
+    readonly topic?: string | null;
+    readonly type: ChannelType;
+  },
+  supportCategoryId: string,
+  ticketPanelChannelId: string,
+): boolean {
+  return (
+    channel.type === ChannelType.GuildText &&
+    channel.parentId === supportCategoryId &&
+    channel.id !== ticketPanelChannelId &&
+    /^тикет-\d{4,}$/.test(channel.name) &&
+    /^Тикет #\d{4,} · /.test(channel.topic ?? "")
+  );
+}
+
+export function shouldLogChannelEventInDiscord(input: {
+  readonly managedTicket: boolean;
+  readonly temporaryVoice: boolean;
+}): boolean {
+  return !(input.managedTicket || input.temporaryVoice);
+}
+
 async function registerStatusCommand(guild: Guild) {
   const command = new SlashCommandBuilder()
     .setName("статус")
@@ -696,11 +723,19 @@ export async function startGuildCore(
 
   safeOn(Events.ChannelCreate, async (channel) => {
     if (!channel.isDMBased() && channel.guild.id === guildId) {
+      const managedTicket = isManagedTicketChannelShape(
+        channel,
+        resources.channels.support.category,
+        resources.channels.support.openTicket,
+      );
       const temporaryVoice = isTemporaryVoiceChannel(channel, resources);
       await refreshGuildResourceCatalog();
       await audit.publish({
         category: "server",
-        discord: !temporaryVoice,
+        discord: shouldLogChannelEventInDiscord({
+          managedTicket,
+          temporaryVoice,
+        }),
         eventType: "channel.created",
         payload: {
           channelId: channel.id,
@@ -718,6 +753,11 @@ export async function startGuildCore(
 
   safeOn(Events.ChannelDelete, async (channel) => {
     if (!channel.isDMBased() && channel.guild.id === guildId) {
+      const managedTicket = isManagedTicketChannelShape(
+        channel,
+        resources.channels.support.category,
+        resources.channels.support.openTicket,
+      );
       const temporaryCandidate = isTemporaryVoiceChannel(channel, resources);
       const managedVoiceRoom =
         channel.type === ChannelType.GuildVoice
@@ -726,7 +766,10 @@ export async function startGuildCore(
       await refreshGuildResourceCatalog();
       await audit.publish({
         category: "server",
-        discord: !(temporaryCandidate || managedVoiceRoom),
+        discord: shouldLogChannelEventInDiscord({
+          managedTicket,
+          temporaryVoice: temporaryCandidate || Boolean(managedVoiceRoom),
+        }),
         eventType: "channel.deleted",
         payload: {
           channelId: channel.id,
@@ -769,11 +812,19 @@ export async function startGuildCore(
     const beforeSnapshot = snapshot(before);
     const afterSnapshot = snapshot(after);
     const description = describeChannelUpdate(beforeSnapshot, afterSnapshot);
+    const managedTicket = isManagedTicketChannelShape(
+      after,
+      resources.channels.support.category,
+      resources.channels.support.openTicket,
+    );
     const temporaryVoice = isTemporaryVoiceChannel(after, resources);
     await refreshGuildResourceCatalog();
     await audit.publish({
       category: "server",
-      discord: !temporaryVoice,
+      discord: shouldLogChannelEventInDiscord({
+        managedTicket,
+        temporaryVoice,
+      }),
       eventType: "channel.updated",
       payload: {
         after: afterSnapshot,

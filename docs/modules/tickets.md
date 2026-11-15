@@ -82,5 +82,11 @@ Operational failures remain in the `бот` log; currently this includes a faile
 Discord transcript delivery. Low-level records and configuration publication
 history continue to be retained in PostgreSQL.
 
+Low-level `channel.created`, `channel.updated`, and `channel.deleted` events are
+still written to PostgreSQL. For bot-managed ticket channels they are not
+repeated in Discord, so each lifecycle action produces one meaningful log entry
+instead of a technical duplicate. Ordinary channels, including the permanent
+`открыть-тикет` panel channel, keep their normal server audit trail.
+
 See [the server structure](../discord/server-structure.md) and
 [the architecture overview](../architecture/overview.md).
