@@ -88,5 +88,9 @@ repeated in Discord, so each lifecycle action produces one meaningful log entry
 instead of a technical duplicate. Ordinary channels, including the permanent
 `открыть-тикет` panel channel, keep their normal server audit trail.
 
+The permanent deletion event retains the channel name, clickable Discord
+mention, and raw numeric ID. Discord changes the mention to `#неизвестно` after
+deletion, while the saved ID remains searchable.
+
 See [the server structure](../discord/server-structure.md) and
 [the architecture overview](../architecture/overview.md).

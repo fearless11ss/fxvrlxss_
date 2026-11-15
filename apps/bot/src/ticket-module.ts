@@ -53,6 +53,18 @@ function ticketNumber(value: number): string {
   return String(value).padStart(4, "0");
 }
 
+export function describeTicketChannelDeletion(input: {
+  readonly channelId: string;
+  readonly channelName: string;
+  readonly ticketNumber: number;
+}): string {
+  return [
+    `Удалён Discord-канал закрытого тикета #${ticketNumber(input.ticketNumber)} ${escapeMarkdown(input.channelName)}.`,
+    `Канал: <#${input.channelId}> · ID: ${input.channelId}`,
+    "Запись и транскрипт сохранены в PostgreSQL.",
+  ].join("\n");
+}
+
 function isUnknownDiscordChannel(error: unknown): boolean {
   return (
     typeof error === "object" &&
@@ -511,7 +523,16 @@ export class TicketModule implements TicketConfigurationApplier {
           channelName,
           ticketNumber: ticket.number,
         },
-        summary: `Удалён Discord-канал закрытого тикета #${expected} \`${escapeMarkdown(channelName)}\`. Запись и транскрипт сохранены в PostgreSQL.`,
+        subject: {
+          id: ticket.channelId,
+          kind: "channel",
+          label: channelName,
+        },
+        summary: describeTicketChannelDeletion({
+          channelId: ticket.channelId,
+          channelName,
+          ticketNumber: ticket.number,
+        }),
         title: "Канал тикета удалён",
       });
       await interaction

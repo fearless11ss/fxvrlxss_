@@ -2,7 +2,11 @@ import { ComponentType } from "discord.js";
 import { describe, expect, it } from "vitest";
 
 import { defaultTicketConfig } from "@fxvrlxss/domain/ticket-config";
-import { buildTicketControls, buildTicketPanel } from "./ticket-module.js";
+import {
+  buildTicketControls,
+  buildTicketPanel,
+  describeTicketChannelDeletion,
+} from "./ticket-module.js";
 import type { TicketRecord } from "./ticket-repository.js";
 
 const ticket: TicketRecord = {
@@ -21,6 +25,21 @@ const ticket: TicketRecord = {
 };
 
 describe("ticket Components V2", () => {
+  it("keeps a deleted ticket channel mention and permanent ID", () => {
+    const summary = describeTicketChannelDeletion({
+      channelId: "1571430097158668319",
+      channelName: "тикет-0005",
+      ticketNumber: 5,
+    });
+
+    expect(summary).toContain("тикета #0005 тикет-0005");
+    expect(summary).toContain(
+      "Канал: <#1571430097158668319> · ID: 1571430097158668319",
+    );
+    expect(summary).toContain("Запись и транскрипт сохранены в PostgreSQL.");
+    expect(summary).not.toContain("`тикет-0005`");
+  });
+
   it("builds the four-type support panel", () => {
     const panel = buildTicketPanel(defaultTicketConfig)[0]?.toJSON();
 
