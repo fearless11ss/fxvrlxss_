@@ -68,5 +68,18 @@ new owner's persistent profile.
 - Configuration changes use immutable drafts and are acknowledged as published
   only after the bot updates every active in-room control panel.
 
+## Audit trail
+
+Discord receives one lifecycle event after a room is fully created and one
+after it is deleted. Each event uses a stable snapshot containing the channel
+name and raw ID, owner, creation and deletion times, lock and visibility state,
+participant limit, and the trusted and banned user IDs. The log therefore
+remains readable after Discord removes the channel object.
+
+Low-level `channel.created`, `channel.updated`, and `channel.deleted` events are
+still written to PostgreSQL. For managed temporary rooms they are not repeated
+in Discord, so the bot's permission-overwrite setup does not flood the server
+log.
+
 See [the server structure](../discord/server-structure.md) and
 [the architecture overview](../architecture/overview.md).

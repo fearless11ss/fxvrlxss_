@@ -6,7 +6,7 @@ export type AuditCategory =
 export type AuditSeverity = "info" | "warning" | "critical";
 
 export type AuditDiscordEntity =
-  | { readonly id: string; readonly kind: "channel" }
+  | { readonly id: string; readonly kind: "channel"; readonly label?: string }
   | { readonly id: string; readonly kind: "role" }
   | { readonly id: string; readonly kind: "user" }
   | {

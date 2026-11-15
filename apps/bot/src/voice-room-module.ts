@@ -41,6 +41,10 @@ import type {
   VoiceRoomRecord,
   VoiceRoomRepository,
 } from "./voice-room-repository.js";
+import {
+  describeVoiceRoomLifecycle,
+  type VoiceRoomSnapshot,
+} from "./voice-room-log.js";
 
 const LEGACY_PANEL_ID = "voice:panel";
 const MAX_ACCESS_PROFILE_ENTRIES = 90;
@@ -262,6 +266,7 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
   readonly #logger: Logger;
   readonly #repository: VoiceRoomRepository;
   readonly #resources: GuildResources;
+  readonly #reportedDeletions = new Set<string>();
   #config: VoiceConfig = defaultVoiceConfig;
 
   constructor(options: {
@@ -313,9 +318,19 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
     if (after.channelId) await this.#enforceJoinedRoom(after);
   }
 
-  async handleChannelDelete(channelId: string): Promise<void> {
-    const room = await this.#repository.findByChannel(channelId);
-    if (room) await this.#repository.remove(channelId);
+  async handleChannelDelete(
+    channel: Pick<VoiceChannel, "createdAt" | "id" | "name">,
+  ): Promise<boolean> {
+    if (this.#reportedDeletions.delete(channel.id)) {
+      await this.#repository.remove(channel.id);
+      return true;
+    }
+    const room = await this.#repository.findByChannel(channel.id);
+    if (!room) return false;
+    const snapshot = await this.#roomSnapshot(room, channel, new Date());
+    await this.#publishRoomDeleted(snapshot, "manual_or_external");
+    await this.#repository.remove(channel.id);
+    return true;
   }
 
   async handleMessageDelete(
@@ -691,14 +706,19 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
         channel,
         "fxvrlxss_ temporary room created",
       );
+      const snapshot = await this.#roomSnapshot(created, channel);
       await this.#audit.publish({
         actor: { id: member.id, kind: "user" },
-        category: "bot",
+        category: "server",
         discord: true,
         eventType: "voice.room_created",
-        payload: { channelId: channel.id, userLimit: created.userLimit },
-        subject: { id: channel.id, kind: "channel" },
-        summary: `Для <@${member.id}> создана временная комната <#${channel.id}>.`,
+        payload: { room: snapshot },
+        subject: {
+          id: channel.id,
+          kind: "channel",
+          label: channel.name,
+        },
+        summary: describeVoiceRoomLifecycle("created", snapshot),
         title: "Временная комната создана",
       });
     } catch (error) {
@@ -754,17 +774,12 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
     }
     const people = channel.members.filter((member) => !member.user.bot);
     if (people.size === 0) {
-      const channelName = channel.name;
-      await channel.delete("fxvrlxss_ empty temporary room");
-      await this.#repository.remove(channelId);
-      await this.#audit.publish({
-        category: "bot",
-        discord: true,
-        eventType: "voice.room_deleted",
-        payload: { channelId, channelName },
-        summary: `Пустая временная комната \`${escapeMarkdown(channelName)}\` удалена.`,
-        title: "Временная комната удалена",
-      });
+      await this.#deleteManagedRoom(
+        room,
+        channel,
+        "empty",
+        "fxvrlxss_ empty temporary room",
+      );
       return;
     }
     if (room.ownerId !== departedUserId) return;
@@ -795,6 +810,74 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
       subject: { id: channelId, kind: "channel" },
       summary: `Владение <#${channelId}> автоматически передано <@${nextOwner.id}> после выхода прежнего владельца.`,
       title: "Владелец комнаты изменён",
+    });
+  }
+
+  async #roomSnapshot(
+    room: VoiceRoomRecord,
+    channel: Pick<VoiceChannel, "createdAt" | "id" | "name">,
+    deletedAt?: Date,
+  ): Promise<VoiceRoomSnapshot> {
+    const entries = await this.#accessRepository.list(
+      this.#guild.id,
+      room.ownerId,
+    );
+    return {
+      bannedIds: entries
+        .filter((entry) => entry.kind === "banned")
+        .map((entry) => entry.subjectId),
+      channelId: channel.id,
+      createdAt: channel.createdAt.toISOString(),
+      ...(deletedAt ? { deletedAt: deletedAt.toISOString() } : {}),
+      hidden: room.hidden,
+      locked: room.locked,
+      name: channel.name,
+      ownerId: room.ownerId,
+      trustedIds: entries
+        .filter((entry) => entry.kind === "trusted")
+        .map((entry) => entry.subjectId),
+      userLimit: room.userLimit,
+    };
+  }
+
+  async #deleteManagedRoom(
+    room: VoiceRoomRecord,
+    channel: VoiceChannel,
+    reason: "empty" | "startup_reconciliation",
+    discordReason: string,
+  ): Promise<void> {
+    const snapshot = await this.#roomSnapshot(room, channel);
+    this.#reportedDeletions.add(channel.id);
+    try {
+      await channel.delete(discordReason);
+    } catch (error) {
+      this.#reportedDeletions.delete(channel.id);
+      throw error;
+    }
+    const deletedSnapshot: VoiceRoomSnapshot = {
+      ...snapshot,
+      deletedAt: new Date().toISOString(),
+    };
+    await this.#publishRoomDeleted(deletedSnapshot, reason);
+    await this.#repository.remove(channel.id);
+  }
+
+  async #publishRoomDeleted(
+    snapshot: VoiceRoomSnapshot,
+    reason: "empty" | "manual_or_external" | "startup_reconciliation",
+  ): Promise<void> {
+    await this.#audit.publish({
+      category: "server",
+      discord: true,
+      eventType: "voice.room_deleted",
+      payload: { reason, room: snapshot },
+      subject: {
+        id: snapshot.channelId,
+        kind: "channel",
+        label: snapshot.name,
+      },
+      summary: describeVoiceRoomLifecycle("deleted", snapshot),
+      title: "Временная комната удалена",
     });
   }
 
@@ -944,8 +1027,12 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
           continue;
         }
         if (channel.members.filter((member) => !member.user.bot).size === 0) {
-          await channel.delete("fxvrlxss_ stale empty temporary room");
-          await this.#repository.remove(room.channelId);
+          await this.#deleteManagedRoom(
+            room,
+            channel,
+            "startup_reconciliation",
+            "fxvrlxss_ stale empty temporary room",
+          );
           continue;
         }
         await channel.setUserLimit(room.userLimit);

@@ -38,6 +38,10 @@ function category(id: string | null): string {
   return id ? `<#${id}>` : "без категории";
 }
 
+function channel(snapshot: ChannelUpdateSnapshot): string {
+  return `\`${snapshot.name.replaceAll("`", "ˋ")}\` (ID: \`${snapshot.id}\`)`;
+}
+
 export function describeChannelUpdate(
   before: ChannelUpdateSnapshot,
   after: ChannelUpdateSnapshot,
@@ -54,45 +58,45 @@ export function describeChannelUpdate(
     permissionsKey(after.permissionOverwrites)
   ) {
     changes.push("permissions");
-    lines.push(`Изменены права доступа канала <#${after.id}>.`);
+    lines.push(`Изменены права доступа канала ${channel(after)}.`);
   }
   if (before.parentId !== after.parentId) {
     changes.push("parent");
     lines.push(
-      `Канал <#${after.id}> перемещён: ${category(before.parentId)} → ${category(after.parentId)}.`,
+      `Канал ${channel(after)} перемещён: ${category(before.parentId)} → ${category(after.parentId)}.`,
     );
   }
   if (before.position !== after.position) {
     changes.push("position");
     lines.push(
-      `Изменена позиция канала <#${after.id}>: ${before.position} → ${after.position}.`,
+      `Изменена позиция канала ${channel(after)}: ${before.position} → ${after.position}.`,
     );
   }
   if (before.type !== after.type) {
     changes.push("type");
-    lines.push(`Изменён тип канала <#${after.id}>.`);
+    lines.push(`Изменён тип канала ${channel(after)}.`);
   }
   if (before.topic !== after.topic) {
     changes.push("topic");
-    lines.push(`Изменена тема канала <#${after.id}>.`);
+    lines.push(`Изменена тема канала ${channel(after)}.`);
   }
   if (before.nsfw !== after.nsfw) {
     changes.push("nsfw");
     lines.push(
-      `${after.nsfw ? "Включена" : "Отключена"} отметка 18+ для канала <#${after.id}>.`,
+      `${after.nsfw ? "Включена" : "Отключена"} отметка 18+ для канала ${channel(after)}.`,
     );
   }
   if (before.rateLimitPerUser !== after.rateLimitPerUser) {
     changes.push("slowmode");
     lines.push(
-      `Изменён медленный режим канала <#${after.id}>: ${before.rateLimitPerUser ?? 0} → ${after.rateLimitPerUser ?? 0} сек.`,
+      `Изменён медленный режим канала ${channel(after)}: ${before.rateLimitPerUser ?? 0} → ${after.rateLimitPerUser ?? 0} сек.`,
     );
   }
 
   if (changes.length === 0) {
     return {
       changes: ["other"],
-      summary: `Обновлены параметры канала <#${after.id}>.`,
+      summary: `Обновлены параметры канала ${channel(after)}.`,
       title: "Канал изменён",
     };
   }

@@ -57,6 +57,22 @@ describe("Components V2 messages", () => {
     expect(JSON.stringify(role)).toContain("<@&role-1>");
   });
 
+  it("renders a snapshotted channel without a perishable mention", () => {
+    const channel = buildAuditComponents({
+      ...auditEvent,
+      subject: {
+        id: "channel-1",
+        kind: "channel",
+        label: "Комната владельца",
+      },
+    })[0]?.toJSON();
+    const serialized = JSON.stringify(channel);
+
+    expect(serialized).toContain("Комната владельца");
+    expect(serialized).toContain("channel-1");
+    expect(serialized).not.toContain("<#channel-1>");
+  });
+
   it("builds lifecycle containers for joins and leaves", () => {
     const joined = buildLifecycleComponents("joined", "user-1")[0]?.toJSON();
     const left = buildLifecycleComponents("left", "user-1")[0]?.toJSON();

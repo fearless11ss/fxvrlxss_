@@ -34,7 +34,9 @@ function accentColor(event: AuditEvent): number {
 function discordEntity(entity: AuditDiscordEntity, guildId: string): string {
   switch (entity.kind) {
     case "channel":
-      return `<#${entity.id}>`;
+      return entity.label
+        ? `\`${escapeMarkdown(entity.label)}\` (ID: \`${entity.id}\`)`
+        : `<#${entity.id}>`;
     case "message":
       return `[сообщение](https://discord.com/channels/${guildId}/${entity.channelId}/${entity.id})`;
     case "role":

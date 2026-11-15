@@ -1,5 +1,6 @@
 import {
   AutoModerationActionType,
+  ChannelType,
   Events,
   MessageFlags,
   PermissionFlagsBits,
@@ -198,6 +199,21 @@ async function sendLifecycleMessage(
 
 function isOwner(member: GuildMember, resources: GuildResources) {
   return member.roles.cache.has(resources.roles.owner);
+}
+
+function isTemporaryVoiceChannel(
+  channel: {
+    readonly id: string;
+    readonly parentId?: string | null;
+    readonly type: ChannelType;
+  },
+  resources: GuildResources,
+): boolean {
+  return (
+    channel.type === ChannelType.GuildVoice &&
+    channel.parentId === resources.channels.voice.category &&
+    channel.id !== resources.channels.voice.createRoom
+  );
 }
 
 async function registerStatusCommand(guild: Guild) {
@@ -680,17 +696,20 @@ export async function startGuildCore(
 
   safeOn(Events.ChannelCreate, async (channel) => {
     if (!channel.isDMBased() && channel.guild.id === guildId) {
+      const temporaryVoice = isTemporaryVoiceChannel(channel, resources);
       await refreshGuildResourceCatalog();
       await audit.publish({
         category: "server",
-        discord: true,
+        discord: !temporaryVoice,
         eventType: "channel.created",
         payload: {
           channelId: channel.id,
+          createdAt: channel.createdAt.toISOString(),
           name: channel.name,
+          parentId: channel.parentId,
           type: channel.type,
         },
-        subject: { id: channel.id, kind: "channel" },
+        subject: { id: channel.id, kind: "channel", label: channel.name },
         summary: `Создан канал \`${channel.name}\`.`,
         title: "Канал создан",
       });
@@ -699,17 +718,25 @@ export async function startGuildCore(
 
   safeOn(Events.ChannelDelete, async (channel) => {
     if (!channel.isDMBased() && channel.guild.id === guildId) {
-      await voiceModule?.handleChannelDelete(channel.id);
+      const temporaryCandidate = isTemporaryVoiceChannel(channel, resources);
+      const managedVoiceRoom =
+        channel.type === ChannelType.GuildVoice
+          ? await voiceModule?.handleChannelDelete(channel)
+          : false;
       await refreshGuildResourceCatalog();
       await audit.publish({
         category: "server",
-        discord: true,
+        discord: !(temporaryCandidate || managedVoiceRoom),
         eventType: "channel.deleted",
         payload: {
           channelId: channel.id,
+          createdAt: channel.createdAt.toISOString(),
+          deletedAt: new Date().toISOString(),
           name: channel.name,
+          parentId: channel.parentId,
           type: channel.type,
         },
+        subject: { id: channel.id, kind: "channel", label: channel.name },
         summary: `Удалён канал \`${channel.name}\` (ID: \`${channel.id}\`).`,
         title: "Канал удалён",
       });
@@ -742,17 +769,18 @@ export async function startGuildCore(
     const beforeSnapshot = snapshot(before);
     const afterSnapshot = snapshot(after);
     const description = describeChannelUpdate(beforeSnapshot, afterSnapshot);
+    const temporaryVoice = isTemporaryVoiceChannel(after, resources);
     await refreshGuildResourceCatalog();
     await audit.publish({
       category: "server",
-      discord: true,
+      discord: !temporaryVoice,
       eventType: "channel.updated",
       payload: {
         after: afterSnapshot,
         before: beforeSnapshot,
         changes: description.changes,
       },
-      subject: { id: after.id, kind: "channel" },
+      subject: { id: after.id, kind: "channel", label: after.name },
       summary: description.summary,
       title: description.title,
     });
