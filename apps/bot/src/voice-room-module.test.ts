@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { defaultVoiceConfig } from "@fxvrlxss/domain/voice-config";
+import { OverwriteType } from "discord.js";
 import {
   buildVoiceAccessManager,
+  buildVoiceMemberOverwritePlan,
   buildVoiceRoomControls,
 } from "./voice-room-module.js";
 import type { VoiceAccessEntry } from "./voice-access-repository.js";
@@ -79,5 +81,29 @@ describe("temporary voice Components V2", () => {
     expect(serialized).toContain("voice:access:trusted:add:open");
     expect(serialized).toContain("voice:access:trusted:remove:open");
     expect(serialized).toContain("всех его будущих комнат");
+  });
+
+  it("marks persisted user IDs as member permission overwrites", () => {
+    const entries: VoiceAccessEntry[] = [
+      {
+        guildId: "guild-1",
+        kind: "trusted",
+        ownerId: "owner-1",
+        subjectId: "uncached-friend",
+      },
+      {
+        guildId: "guild-1",
+        kind: "banned",
+        ownerId: "owner-1",
+        subjectId: "uncached-blocked",
+      },
+    ];
+
+    const plan = buildVoiceMemberOverwritePlan("owner-1", entries);
+
+    expect(plan).toHaveLength(3);
+    expect(
+      plan.every((overwrite) => overwrite.type === OverwriteType.Member),
+    ).toBe(true);
   });
 });

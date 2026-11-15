@@ -23,6 +23,7 @@ import {
   type Guild,
   type GuildMember,
   type Interaction,
+  type PermissionOverwriteOptions,
   type VoiceChannel,
   type VoiceState,
 } from "discord.js";
@@ -176,6 +177,42 @@ export function buildVoiceAccessManager(
             .setStyle(ButtonStyle.Secondary),
         ),
       ),
+  ];
+}
+
+export interface VoiceMemberOverwritePlan {
+  readonly id: string;
+  readonly kind: "owner" | VoiceAccessKind;
+  readonly permissions: PermissionOverwriteOptions;
+  readonly reason: string;
+  readonly type: OverwriteType.Member;
+}
+
+export function buildVoiceMemberOverwritePlan(
+  ownerId: string,
+  entries: readonly VoiceAccessEntry[],
+): readonly VoiceMemberOverwritePlan[] {
+  return [
+    {
+      id: ownerId,
+      kind: "owner",
+      permissions: { Connect: true, ViewChannel: true },
+      reason: `Temporary room owner ${ownerId}`,
+      type: OverwriteType.Member,
+    },
+    ...entries.map((entry): VoiceMemberOverwritePlan => ({
+      id: entry.subjectId,
+      kind: entry.kind,
+      permissions:
+        entry.kind === "trusted"
+          ? { Connect: true, ViewChannel: true }
+          : { Connect: false, ViewChannel: false },
+      reason:
+        entry.kind === "trusted"
+          ? `Trusted by temporary room owner ${ownerId}`
+          : `Banned by temporary room owner ${ownerId}`,
+      type: OverwriteType.Member,
+    })),
   ];
 }
 
@@ -769,17 +806,16 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
       this.#guild.id,
       room.ownerId,
     );
-    const trustedIds = entries
-      .filter((entry) => entry.kind === "trusted")
-      .map((entry) => entry.subjectId);
     const bannedIds = entries
       .filter((entry) => entry.kind === "banned")
       .map((entry) => entry.subjectId);
-    const managedMemberIds = new Set([
+    const memberOverwrites = buildVoiceMemberOverwritePlan(
       room.ownerId,
-      ...trustedIds,
-      ...bannedIds,
-    ]);
+      entries,
+    );
+    const managedMemberIds = new Set(
+      memberOverwrites.map((overwrite) => overwrite.id),
+    );
     await Promise.all(
       channel.permissionOverwrites.cache
         .filter(
@@ -799,26 +835,14 @@ export class VoiceRoomModule implements VoiceConfigurationApplier {
       channel.permissionOverwrites.edit(this.#guild.roles.everyone.id, base),
       channel.permissionOverwrites.edit(this.#resources.roles.member, base),
     ]);
-    await channel.permissionOverwrites.edit(room.ownerId, {
-      Connect: true,
-      ViewChannel: true,
-    });
-    await Promise.all([
-      ...trustedIds.map((subjectId) =>
-        channel.permissionOverwrites.edit(
-          subjectId,
-          { Connect: true, ViewChannel: true },
-          { reason: `Trusted by temporary room owner ${room.ownerId}` },
-        ),
+    await Promise.all(
+      memberOverwrites.map((overwrite) =>
+        channel.permissionOverwrites.edit(overwrite.id, overwrite.permissions, {
+          reason: overwrite.reason,
+          type: overwrite.type,
+        }),
       ),
-      ...bannedIds.map((subjectId) =>
-        channel.permissionOverwrites.edit(
-          subjectId,
-          { Connect: false, ViewChannel: false },
-          { reason: `Banned by temporary room owner ${room.ownerId}` },
-        ),
-      ),
-    ]);
+    );
     await Promise.all(
       bannedIds
         .map((subjectId) => channel.members.get(subjectId))
