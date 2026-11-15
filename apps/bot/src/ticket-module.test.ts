@@ -32,9 +32,10 @@ describe("ticket Components V2", () => {
       ticketNumber: 5,
     });
 
-    expect(summary).toContain("тикета #0005 тикет-0005");
+    expect(summary).toContain("Удалён канал закрытого тикета #0005.");
+    expect(summary).toContain("Название: тикет-0005");
     expect(summary).toContain(
-      "Канал: <#1571430097158668319> · ID: 1571430097158668319",
+      "Ссылка: <#1571430097158668319> · ID: 1571430097158668319",
     );
     expect(summary).toContain("Запись и транскрипт сохранены в PostgreSQL.");
     expect(summary).not.toContain("`тикет-0005`");

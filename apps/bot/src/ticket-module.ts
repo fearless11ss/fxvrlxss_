@@ -59,8 +59,9 @@ export function describeTicketChannelDeletion(input: {
   readonly ticketNumber: number;
 }): string {
   return [
-    `Удалён Discord-канал закрытого тикета #${ticketNumber(input.ticketNumber)} ${escapeMarkdown(input.channelName)}.`,
-    `Канал: <#${input.channelId}> · ID: ${input.channelId}`,
+    `Удалён канал закрытого тикета #${ticketNumber(input.ticketNumber)}.`,
+    `Название: ${escapeMarkdown(input.channelName)}`,
+    `Ссылка: <#${input.channelId}> · ID: ${input.channelId}`,
     "Запись и транскрипт сохранены в PostgreSQL.",
   ].join("\n");
 }
