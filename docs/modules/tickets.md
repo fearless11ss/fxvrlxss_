@@ -74,5 +74,13 @@ its stable key.
 - `apps/dashboard` edits drafts and requests publication without receiving the
   Discord token.
 
+## Audit routing
+
+Normal ticket lifecycle events are sent to the `сервер` log: opening, claiming,
+participant changes, closing, reopening, and permanent channel deletion.
+Operational failures remain in the `бот` log; currently this includes a failed
+Discord transcript delivery. Low-level records and configuration publication
+history continue to be retained in PostgreSQL.
+
 See [the server structure](../discord/server-structure.md) and
 [the architecture overview](../architecture/overview.md).

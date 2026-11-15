@@ -415,7 +415,7 @@ export class TicketModule implements TicketConfigurationApplier {
       });
       await this.#audit.publish({
         actor: { id: member.id, kind: "user" },
-        category: "bot",
+        category: "server",
         discord: true,
         eventType: "ticket.claimed",
         subject: { id: ticket.channelId, kind: "channel" },
@@ -503,7 +503,7 @@ export class TicketModule implements TicketConfigurationApplier {
       }
       await this.#audit.publish({
         actor: { id: interaction.user.id, kind: "user" },
-        category: "bot",
+        category: "server",
         discord: true,
         eventType: "ticket.channel_deleted",
         payload: {
@@ -540,7 +540,7 @@ export class TicketModule implements TicketConfigurationApplier {
       });
       await this.#audit.publish({
         actor: { id: member.id, kind: "user" },
-        category: "bot",
+        category: "server",
         discord: true,
         eventType: "ticket.reopened",
         subject: { id: ticket.channelId, kind: "channel" },
@@ -631,7 +631,7 @@ export class TicketModule implements TicketConfigurationApplier {
       });
       await this.#audit.publish({
         actor: { id: member.id, kind: "user" },
-        category: "bot",
+        category: "server",
         discord: true,
         eventType: adding
           ? "ticket.participant_added"
@@ -760,7 +760,7 @@ export class TicketModule implements TicketConfigurationApplier {
       await interaction.editReply(`Тикет создан: <#${channel.id}>`);
       await this.#audit.publish({
         actor: { id: interaction.user.id, kind: "user" },
-        category: "bot",
+        category: "server",
         discord: true,
         eventType: "ticket.opened",
         subject: { id: channel.id, kind: "channel" },
@@ -906,7 +906,7 @@ export class TicketModule implements TicketConfigurationApplier {
     }
     await this.#audit.publish({
       ...(actorId ? { actor: { id: actorId, kind: "user" } as const } : {}),
-      category: "bot",
+      category: "server",
       discord: true,
       eventType: "ticket.closed",
       payload: { reason, transcriptEntries: snapshot?.length ?? 0 },
