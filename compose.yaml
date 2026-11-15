@@ -50,6 +50,7 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL_FILE: /run/secrets/database_url
+      DISCORD_APPEAL_GUILD_ID: ${DISCORD_APPEAL_GUILD_ID:-}
       DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:?set DISCORD_GUILD_ID}
       DISCORD_TOKEN_FILE: /run/secrets/discord_token
       HEALTH_PORT: 3011

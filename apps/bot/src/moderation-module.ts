@@ -100,6 +100,40 @@ function caseNumber(value: number): string {
   return String(value).padStart(4, "0");
 }
 
+export function buildModerationNotice(input: {
+  readonly activePoints: number;
+  readonly appealInviteUrl?: string;
+  readonly appliedAction: string;
+  readonly caseNumber: number | null;
+  readonly channelName?: string;
+  readonly heading: string;
+  readonly points: number;
+  readonly reasonLabel: string;
+  readonly serverName: string;
+  readonly summary: string;
+}): string {
+  return [
+    input.heading,
+    `Сервер: **${escapeMarkdown(input.serverName)}**`,
+    input.channelName
+      ? `Канал: **#${escapeMarkdown(input.channelName)}**`
+      : undefined,
+    `${input.reasonLabel}: ${escapeMarkdown(input.summary)}`,
+    `Действие: ${input.appliedAction}.`,
+    input.points > 0
+      ? `Баллы: +${input.points} · всего ${input.activePoints}.`
+      : undefined,
+    input.caseNumber ? `Дело: #${caseNumber(input.caseNumber)}.` : undefined,
+    input.caseNumber && input.appealInviteUrl
+      ? `Обжалование бана: ${input.appealInviteUrl}`
+      : input.caseNumber
+        ? "Обжалование: через тикеты сервера."
+        : undefined,
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n");
+}
+
 function actionButton(action: ModerationAction, userId: string): ButtonBuilder {
   return new ButtonBuilder()
     .setCustomId(`moderation:apply:open:${action}:${userId}`)
@@ -281,6 +315,7 @@ async function registerModerationCommand(guild: Guild): Promise<void> {
 export class ModerationModule
   implements ModerationConfigurationApplier, ModerationAppealHandler
 {
+  readonly #appealInviteUrl: string | undefined;
   readonly #audit: AuditBus;
   readonly #automodQueues = new Map<string, Promise<void>>();
   readonly #guild: Guild;
@@ -290,12 +325,14 @@ export class ModerationModule
   #config: ModerationConfig;
 
   constructor(options: {
+    readonly appealInviteUrl?: string;
     readonly audit: AuditBus;
     readonly guild: Guild;
     readonly logger: Logger;
     readonly quarantineRoleId: string;
     readonly repository: ModerationRepository;
   }) {
+    this.#appealInviteUrl = options.appealInviteUrl;
     this.#audit = options.audit;
     this.#guild = options.guild;
     this.#logger = options.logger;
@@ -427,12 +464,17 @@ export class ModerationModule
         ? "удаление сообщения"
         : `${primaryAction} + удаление сообщения`
       : primaryAction;
-    await this.#notifyAutomodMember({
+    await this.#notifyMember({
       activePoints,
       appliedAction,
+      ...(decision.action === "ban" && this.#appealInviteUrl
+        ? { appealInviteUrl: this.#appealInviteUrl }
+        : {}),
       caseNumber: item?.number ?? null,
       channelId: input.channelId,
+      heading: "Автомодерация зафиксировала нарушение.",
       points: input.points,
+      reasonLabel: "Нарушение",
       summary: input.summary,
       userId: input.userId,
     });
@@ -777,6 +819,20 @@ export class ModerationModule
           userId,
         })
       ).record;
+      await this.#notifyMember({
+        activePoints,
+        appliedAction: actionLabels[decision.action],
+        ...(decision.action === "ban" && this.#appealInviteUrl
+          ? { appealInviteUrl: this.#appealInviteUrl }
+          : {}),
+        caseNumber: item.number,
+        ...(interaction.channelId ? { channelId: interaction.channelId } : {}),
+        heading: "К вам применено действие модерации.",
+        points,
+        reasonLabel: "Причина",
+        summary: reason,
+        userId,
+      });
       try {
         await this.#applyDiscordAction(
           target,
@@ -948,36 +1004,45 @@ export class ModerationModule
     await target.ban({ deleteMessageSeconds: 0, reason: auditReason });
   }
 
-  async #notifyAutomodMember(input: {
+  async #notifyMember(input: {
     readonly activePoints: number;
     readonly appliedAction: string;
+    readonly appealInviteUrl?: string;
     readonly caseNumber: number | null;
-    readonly channelId: string;
+    readonly channelId?: string;
+    readonly heading: string;
     readonly points: number;
+    readonly reasonLabel: string;
     readonly summary: string;
     readonly userId: string;
   }): Promise<void> {
-    const lines = [
-      "Автомодерация зафиксировала нарушение.",
-      `Нарушение: ${input.summary}`,
-      `Действие: ${input.appliedAction}.`,
-      input.points > 0
-        ? `Баллы: +${input.points} · всего ${input.activePoints}.`
-        : undefined,
-      input.caseNumber
-        ? `Дело: #${caseNumber(input.caseNumber)}. Его можно обжаловать через тикеты.`
-        : undefined,
-    ].filter((line): line is string => Boolean(line));
+    const sourceChannel = input.channelId
+      ? this.#guild.channels.cache.get(input.channelId)
+      : undefined;
+    const content = buildModerationNotice({
+      activePoints: input.activePoints,
+      ...(input.appealInviteUrl
+        ? { appealInviteUrl: input.appealInviteUrl }
+        : {}),
+      appliedAction: input.appliedAction,
+      caseNumber: input.caseNumber,
+      ...(sourceChannel ? { channelName: sourceChannel.name } : {}),
+      heading: input.heading,
+      points: input.points,
+      reasonLabel: input.reasonLabel,
+      serverName: this.#guild.name,
+      summary: input.summary,
+    });
     const user = await this.#guild.client.users.fetch(input.userId);
     const delivered = await user
-      .send({ content: lines.join("\n") })
+      .send({ content })
       .then(() => true)
       .catch(() => false);
     if (delivered) return;
 
-    const channel = await this.#guild.channels
-      .fetch(input.channelId)
-      .catch(() => null);
+    const channel = input.channelId
+      ? await this.#guild.channels.fetch(input.channelId).catch(() => null)
+      : null;
     if (!channel?.isSendable()) {
       this.#logger.warn(
         { channelId: input.channelId, userId: input.userId },
@@ -988,7 +1053,7 @@ export class ModerationModule
     const notice = await channel
       .send({
         allowedMentions: { users: [input.userId] },
-        content: [`<@${input.userId}>`, ...lines].join("\n"),
+        content: [`<@${input.userId}>`, content].join("\n"),
       })
       .catch(() => null);
     if (!notice) return;

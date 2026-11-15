@@ -46,6 +46,7 @@ import {
 } from "./guild-resource-catalog.js";
 import type { MessageArchiveReader } from "./message-archive.js";
 import { ModerationModule } from "./moderation-module.js";
+import type { ModerationAppealHandler } from "./moderation-appeals.js";
 import type { ModerationSystemPublicationRepository } from "./moderation-system-publication.js";
 import { ModerationSystemPublicationWorker } from "./moderation-system-publication.js";
 import type { ModerationPublicationRepository } from "./moderation-publication.js";
@@ -63,10 +64,12 @@ import type { VoiceRoomRepository } from "./voice-room-repository.js";
 
 export interface GuildCore {
   readonly audit: AuditBus;
+  readonly moderationAppeals?: ModerationAppealHandler;
   stop(): Promise<void>;
 }
 
 export interface GuildCoreOptions {
+  readonly appealInviteUrl?: string;
   readonly automodPublicationRepository?: AutomodPublicationRepository;
   readonly client: Client;
   readonly databaseConnected: boolean;
@@ -331,6 +334,9 @@ export async function startGuildCore(
   const moderationModule = options.moderationRepository
     ? new ModerationModule({
         audit,
+        ...(options.appealInviteUrl
+          ? { appealInviteUrl: options.appealInviteUrl }
+          : {}),
         guild,
         logger,
         quarantineRoleId: resources.roles.quarantine,
@@ -1102,6 +1108,7 @@ export async function startGuildCore(
 
   return {
     audit,
+    ...(moderationModule ? { moderationAppeals: moderationModule } : {}),
     async stop() {
       await voicePublicationWorker?.stop();
       await ticketPublicationWorker?.stop();

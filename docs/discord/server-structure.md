@@ -76,3 +76,28 @@ places a risky account in `Карантин`.
 created directly below it in `ГОЛОСОВЫЕ` and are removed as soon as no human
 members remain. Their lifecycle is documented in
 [the temporary voice room module](../modules/voice-rooms.md).
+
+## Appeal server
+
+Banned members use a separate, minimal guild. The bot creates missing roles and
+channels additively and runs only the appeal-ticket module there.
+
+```text
+прихожая
+правила
+
+АПЕЛЛЯЦИИ
+├─ открыть-апелляцию
+└─ создаваемые тикеты
+
+КОМАНДА
+└─ обсуждение-апелляций
+
+ЛОГИ
+└─ апелляции
+```
+
+The appeal is tied to the main guild's moderation case by Discord user ID and
+case number. Approval reverses the reversible action in the main guild. The
+appeal guild does not run the main automod, voice, welcome, or manual moderation
+modules.

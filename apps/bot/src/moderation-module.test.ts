@@ -1,7 +1,10 @@
 import { ComponentType } from "discord.js";
 import { describe, expect, it } from "vitest";
 
-import { buildModerationCard } from "./moderation-module.js";
+import {
+  buildModerationCard,
+  buildModerationNotice,
+} from "./moderation-module.js";
 import type { ModerationCaseRecord } from "./moderation-repository.js";
 
 const item: ModerationCaseRecord = {
@@ -47,5 +50,25 @@ describe("manual moderation Components V2", () => {
     expect(serialized).toContain("moderation:apply:open:kick:user-1");
     expect(serialized).toContain("moderation:apply:open:ban:user-1");
     expect(serialized).toContain("moderation:history:user-1");
+  });
+
+  it("identifies the server and gives banned members an appeal invite", () => {
+    const notice = buildModerationNotice({
+      activePoints: 6,
+      appealInviteUrl: "https://discord.gg/appeal",
+      appliedAction: "Бан + удаление сообщения",
+      caseNumber: 12,
+      channelName: "чат",
+      heading: "Автомодерация зафиксировала нарушение.",
+      points: 6,
+      reasonLabel: "Нарушение",
+      serverName: "fxvrlxss_",
+      summary: "стороннее приглашение Discord",
+    });
+
+    expect(notice).toContain("Сервер: **fxvrlxss\\_**");
+    expect(notice).toContain("Канал: **#чат**");
+    expect(notice).toContain("Дело: #0012");
+    expect(notice).toContain("https://discord.gg/appeal");
   });
 });

@@ -45,6 +45,11 @@ Docker Compose expects the files documented in
 `*_FILE` variables so secret contents never need to appear in Compose
 environment blocks.
 
+Set `DISCORD_APPEAL_GUILD_ID` to enable the dedicated appeal guild. The same bot
+must already be a member with Administrator permission. Startup additively
+creates the appeal structure and a permanent invitation; it never deletes
+unrelated roles or channels.
+
 Before starting Compose, assign the secret files to `root:<deployment-group>`
 with mode `0640`. The deployment group's numeric GID must be `1000`, matching
 the unprivileged `node` group inside the application images. Mode `0600` causes

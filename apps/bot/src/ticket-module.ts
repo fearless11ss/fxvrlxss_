@@ -364,6 +364,7 @@ export class TicketModule implements TicketConfigurationApplier {
   constructor(options: {
     readonly audit: AuditBus;
     readonly guild: Guild;
+    readonly initialConfig?: TicketConfig;
     readonly logger: Logger;
     readonly moderationAppeals?: ModerationAppealHandler;
     readonly repository: TicketRepository;
@@ -375,16 +376,18 @@ export class TicketModule implements TicketConfigurationApplier {
     this.#moderationAppeals = options.moderationAppeals;
     this.#repository = options.repository;
     this.#resources = options.resources;
-    this.#config = {
-      ...defaultTicketConfig,
-      staffRoleIds: options.guild.roles.cache
-        .filter((role) =>
-          ["Владелец", "Куратор", "Модератор", "Испытательный срок"].includes(
-            role.name,
-          ),
-        )
-        .map((role) => role.id),
-    };
+    this.#config = ticketConfigSchema.parse(
+      options.initialConfig ?? {
+        ...defaultTicketConfig,
+        staffRoleIds: options.guild.roles.cache
+          .filter((role) =>
+            ["Владелец", "Куратор", "Модератор", "Испытательный срок"].includes(
+              role.name,
+            ),
+          )
+          .map((role) => role.id),
+      },
+    );
   }
 
   async start(): Promise<void> {

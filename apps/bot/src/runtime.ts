@@ -4,6 +4,11 @@ import { createDatabase } from "@fxvrlxss/database/client";
 import { Client, Events, GatewayIntentBits, Partials } from "discord.js";
 import pino, { type Logger } from "pino";
 
+import {
+  prepareAppealGuild,
+  startAppealGuildCore,
+  type AppealGuildCore,
+} from "./appeal-guild-core.js";
 import type { ResolvedBotConfig } from "./config.js";
 import { DatabaseAutomodPublicationRepository } from "./database-automod-publication.js";
 import { DatabaseAuditWriter } from "./database-audit.js";
@@ -71,6 +76,7 @@ export function createBotRuntime(config: ResolvedBotConfig): BotRuntime {
   });
 
   let core: GuildCore | undefined;
+  let appealCore: AppealGuildCore | undefined;
   let ready = false;
   let healthServer: Server | undefined;
 
@@ -93,7 +99,16 @@ export function createBotRuntime(config: ResolvedBotConfig): BotRuntime {
         client.once(Events.ClientReady, (readyClient) => {
           void (async () => {
             try {
+              const appealSetup = config.DISCORD_APPEAL_GUILD_ID
+                ? await prepareAppealGuild(
+                    readyClient,
+                    config.DISCORD_APPEAL_GUILD_ID,
+                  )
+                : undefined;
               core = await startGuildCore({
+                ...(appealSetup
+                  ? { appealInviteUrl: appealSetup.inviteUrl }
+                  : {}),
                 ...(databaseState
                   ? {
                       automodPublicationRepository:
@@ -149,9 +164,29 @@ export function createBotRuntime(config: ResolvedBotConfig): BotRuntime {
                   ? [new DatabaseAuditWriter(databaseState.database)]
                   : [],
               });
+              if (appealSetup) {
+                if (!databaseState || !core.moderationAppeals) {
+                  throw new Error(
+                    "Appeal guild requires PostgreSQL and the moderation module",
+                  );
+                }
+                appealCore = await startAppealGuildCore({
+                  client: readyClient,
+                  logger,
+                  moderationAppeals: core.moderationAppeals,
+                  persistentWriters: [
+                    new DatabaseAuditWriter(databaseState.database),
+                  ],
+                  repository: new DatabaseTicketRepository(
+                    databaseState.database,
+                  ),
+                  setup: appealSetup,
+                });
+              }
               ready = true;
               logger.info(
                 {
+                  appealGuildId: config.DISCORD_APPEAL_GUILD_ID,
                   guildId: config.DISCORD_GUILD_ID,
                   userId: readyClient.user.id,
                 },
@@ -176,6 +211,7 @@ export function createBotRuntime(config: ResolvedBotConfig): BotRuntime {
     },
     async stop() {
       ready = false;
+      await appealCore?.stop();
       await core?.stop();
       await client.destroy();
       if (healthServer) {

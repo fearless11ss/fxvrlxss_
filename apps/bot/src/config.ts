@@ -5,6 +5,10 @@ import { z } from "zod";
 const environmentSchema = z.object({
   DATABASE_URL: z.string().min(1).optional(),
   DATABASE_URL_FILE: z.string().min(1).optional(),
+  DISCORD_APPEAL_GUILD_ID: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.string().min(1).optional(),
+  ),
   DISCORD_GUILD_ID: z.string().min(1),
   DISCORD_TOKEN: z.string().min(1).optional(),
   DISCORD_TOKEN_FILE: z.string().min(1).optional(),

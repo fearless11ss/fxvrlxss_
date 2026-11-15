@@ -33,6 +33,8 @@ assets/         User-provided visual references
   [automoderation module](../modules/automod.md).
 - Manual sanctions, points, and appeals are defined by the
   [manual moderation module](../modules/moderation.md).
+- The dedicated appeal-guild runtime and additive setup live in
+  `apps/bot/src/appeal-guild-core.ts`.
 - Ticket ownership and lifecycle are defined by the
   [ticket module](../modules/tickets.md).
 - Temporary room ownership and cleanup are defined by the
