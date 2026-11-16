@@ -1,11 +1,13 @@
 import { ComponentType } from "discord.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { defaultTicketConfig } from "@fxvrlxss/domain/ticket-config";
 import {
   buildTicketControls,
   buildTicketPanel,
+  completeDeferredTicketClose,
   describeTicketChannelDeletion,
+  setTicketMemberSendPermissions,
 } from "./ticket-module.js";
 import type { TicketRecord } from "./ticket-repository.js";
 
@@ -26,6 +28,37 @@ const ticket: TicketRecord = {
 };
 
 describe("ticket Components V2", () => {
+  it("finishes a deferred close response even when closing fails", async () => {
+    const editReply = vi.fn(() => Promise.resolve());
+
+    await expect(
+      completeDeferredTicketClose({ editReply }, () =>
+        Promise.reject(new Error("close failed")),
+      ),
+    ).rejects.toThrow("close failed");
+    expect(editReply).toHaveBeenCalledWith(
+      "Не удалось завершить закрытие тикета. Ошибка записана в журнал бота.",
+    );
+  });
+
+  it("marks permission overwrites as members when users are not cached", async () => {
+    const edit = vi.fn(
+      (
+        _userId: string,
+        _permissions: unknown,
+        options?: { readonly type?: number },
+      ) => {
+        if (options?.type !== 1) {
+          return Promise.reject(new Error("InvalidType"));
+        }
+        return Promise.resolve();
+      },
+    );
+
+    await expect(
+      setTicketMemberSendPermissions({ edit }, ["uncached-user"], false),
+    ).resolves.toBeUndefined();
+  });
   it("keeps a deleted ticket channel mention and permanent ID", () => {
     const summary = describeTicketChannelDeletion({
       channelId: "1571430097158668319",

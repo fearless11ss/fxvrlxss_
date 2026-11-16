@@ -15,6 +15,7 @@ import {
   LabelBuilder,
   MessageFlags,
   ModalBuilder,
+  OverwriteType,
   PermissionFlagsBits,
   StringSelectMenuBuilder,
   TextDisplayBuilder,
@@ -202,6 +203,48 @@ export function buildTicketControls(
     );
   if (row.components.length > 0) container.addActionRowComponents(row);
   return [container];
+}
+
+interface TicketPermissionOverwriteEditor {
+  edit(
+    userId: string,
+    permissions: { readonly SendMessages: boolean; readonly ViewChannel: true },
+    options?: { readonly type?: OverwriteType },
+  ): Promise<unknown>;
+}
+
+export async function setTicketMemberSendPermissions(
+  editor: TicketPermissionOverwriteEditor,
+  userIds: readonly string[],
+  enabled: boolean,
+): Promise<void> {
+  for (const userId of userIds) {
+    await editor.edit(
+      userId,
+      {
+        SendMessages: enabled,
+        ViewChannel: true,
+      },
+      { type: OverwriteType.Member },
+    );
+  }
+}
+
+export async function completeDeferredTicketClose(
+  interaction: { editReply(content: string): Promise<unknown> },
+  closeTicket: () => Promise<void>,
+): Promise<void> {
+  try {
+    await closeTicket();
+    await interaction.editReply("Тикет закрыт, транскрипт сохранён.");
+  } catch (error) {
+    await interaction
+      .editReply(
+        "Не удалось завершить закрытие тикета. Ошибка записана в журнал бота.",
+      )
+      .catch(() => undefined);
+    throw error;
+  }
 }
 
 function openTicketModal(type: TicketTypeKey, label: string): ModalBuilder {
@@ -535,13 +578,14 @@ export class TicketModule implements TicketConfigurationApplier {
         }
       }
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      await this.#closeTicket(
-        ticket,
-        interaction.fields.getTextInputValue("reason"),
-        interaction.user.id,
-        appealOutcome,
+      await completeDeferredTicketClose(interaction, async () =>
+        this.#closeTicket(
+          ticket,
+          interaction.fields.getTextInputValue("reason"),
+          interaction.user.id,
+          appealOutcome,
+        ),
       );
-      await interaction.editReply("Тикет закрыт, транскрипт сохранён.");
       return true;
     }
 
@@ -981,12 +1025,11 @@ export class TicketModule implements TicketConfigurationApplier {
     enabled: boolean,
   ): Promise<void> {
     const channel = await this.#textChannel(ticket.channelId);
-    for (const userId of [ticket.authorId, ...ticket.participantIds]) {
-      await channel.permissionOverwrites.edit(userId, {
-        SendMessages: enabled,
-        ViewChannel: true,
-      });
-    }
+    await setTicketMemberSendPermissions(
+      channel.permissionOverwrites,
+      [ticket.authorId, ...ticket.participantIds],
+      enabled,
+    );
   }
 
   async #closeTicket(
