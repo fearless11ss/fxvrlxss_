@@ -74,6 +74,16 @@ export interface AutomodViolationResult {
 export type ModerationNoticeAction =
   "ban" | "kick" | "points" | "quarantine" | "timeout" | "warn";
 
+export interface ModerationNoticeInput {
+  readonly action: ModerationNoticeAction;
+  readonly appealUrl?: string;
+  readonly caseNumber: number | null;
+  readonly points: number;
+  readonly serverName: string;
+  readonly summary: string;
+  readonly timeoutMinutes?: number | null;
+}
+
 const automatedActionLabels: Readonly<
   Record<AutomatedModerationAction, string>
 > = {
@@ -104,15 +114,24 @@ function caseNumber(value: number): string {
   return String(value).padStart(4, "0");
 }
 
-export function buildModerationNotice(input: {
-  readonly action: ModerationNoticeAction;
-  readonly appealUrl?: string;
-  readonly caseNumber: number | null;
-  readonly points: number;
-  readonly serverName: string;
-  readonly summary: string;
-  readonly timeoutMinutes?: number | null;
-}): string {
+function moderationNoticeTitle(action: ModerationNoticeAction): string {
+  switch (action) {
+    case "ban":
+      return "Бан";
+    case "kick":
+      return "Исключение с сервера";
+    case "points":
+      return "Баллы нарушения";
+    case "quarantine":
+      return "Карантин";
+    case "timeout":
+      return "Тайм-аут";
+    case "warn":
+      return "Предупреждение";
+  }
+}
+
+export function buildModerationNotice(input: ModerationNoticeInput): string {
   const server = `**${escapeMarkdown(input.serverName)}**`;
   const opening = (() => {
     switch (input.action) {
@@ -142,6 +161,20 @@ export function buildModerationNotice(input: {
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n");
+}
+
+export function buildModerationNoticeComponents(
+  input: ModerationNoticeInput,
+): ContainerBuilder[] {
+  return [
+    new ContainerBuilder()
+      .setAccentColor(input.action === "ban" ? 0xb7b7b2 : 0xf2f2ef)
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(
+          `## ${moderationNoticeTitle(input.action)}\n${buildModerationNotice(input)}`,
+        ),
+      ),
+  ];
 }
 
 function pointWord(value: number): string {
@@ -385,9 +418,15 @@ export class ModerationModule
     return Promise.resolve();
   }
 
-  applyAutomodViolation(
+  async applyAutomodViolation(
     input: AutomodViolationInput,
   ): Promise<AutomodViolationResult> {
+    if (input.message && input.deleteMessage) {
+      if (!input.message.deletable) {
+        throw new Error("Сообщение нельзя удалить");
+      }
+      await input.message.delete();
+    }
     const previous = this.#automodQueues.get(input.userId) ?? Promise.resolve();
     const operation = previous.then(
       () => this.#applyAutomodViolation(input),
@@ -504,12 +543,6 @@ export class ModerationModule
     }
 
     try {
-      if (input.message && input.deleteMessage) {
-        if (!input.message.deletable) {
-          throw new Error("Сообщение нельзя удалить");
-        }
-        await input.message.delete();
-      }
       const target =
         input.action === "quarantine" || decision.action !== "warn"
           ? await this.#guild.members.fetch(input.userId)
@@ -1027,7 +1060,7 @@ export class ModerationModule
     readonly timeoutMinutes?: number | null;
     readonly userId: string;
   }): Promise<void> {
-    const content = buildModerationNotice({
+    const noticeInput: ModerationNoticeInput = {
       action: input.action,
       appealUrl:
         input.action === "ban"
@@ -1040,10 +1073,15 @@ export class ModerationModule
       ...(input.timeoutMinutes === undefined
         ? {}
         : { timeoutMinutes: input.timeoutMinutes }),
-    });
+    };
+    const content = buildModerationNotice(noticeInput);
     const user = await this.#guild.client.users.fetch(input.userId);
     const delivered = await user
-      .send({ content })
+      .send({
+        allowedMentions: { parse: [] },
+        components: buildModerationNoticeComponents(noticeInput),
+        flags: MessageFlags.IsComponentsV2,
+      })
       .then(() => true)
       .catch(() => false);
     if (delivered) return;

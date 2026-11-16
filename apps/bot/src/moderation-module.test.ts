@@ -1,9 +1,11 @@
-import { ComponentType } from "discord.js";
-import { describe, expect, it } from "vitest";
+import { Collection, ComponentType } from "discord.js";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   buildModerationCard,
   buildModerationNotice,
+  buildModerationNoticeComponents,
+  ModerationModule,
 } from "./moderation-module.js";
 import type { ModerationCaseRecord } from "./moderation-repository.js";
 
@@ -33,6 +35,50 @@ const item: ModerationCaseRecord = {
 };
 
 describe("manual moderation Components V2", () => {
+  it("deletes a violating message before waiting for the moderation ledger", async () => {
+    let releaseActivePoints: ((value: number) => void) | undefined;
+    const activePoints = vi.fn(
+      () =>
+        new Promise<number>((resolve) => {
+          releaseActivePoints = resolve;
+        }),
+    );
+    const removeMessage = vi.fn(() => Promise.resolve());
+    const moderation = new ModerationModule({
+      audit: { publish: vi.fn(() => Promise.resolve()) } as never,
+      guild: {
+        client: { user: { id: "bot-1" } },
+        id: "guild-1",
+        roles: { cache: new Collection() },
+      } as never,
+      logger: {} as never,
+      quarantineRoleId: "quarantine-1",
+      repository: { activePoints } as never,
+      ticketChannelId: "tickets-1",
+    });
+
+    const operation = moderation.applyAutomodViolation({
+      action: "observe",
+      applyThresholds: false,
+      channelId: "channel-1",
+      deleteMessage: true,
+      message: { deletable: true, delete: removeMessage } as never,
+      messageId: "message-1",
+      points: 0,
+      signals: ["flood"],
+      sourceEventKey: "event-1",
+      summary: "флуд",
+      timeoutMinutes: 10,
+      userId: "user-1",
+    });
+    await vi.waitFor(() => expect(activePoints).toHaveBeenCalledOnce());
+    const deletedBeforeLedger = removeMessage.mock.calls.length;
+    releaseActivePoints?.(0);
+    await operation;
+
+    expect(deletedBeforeLedger).toBe(1);
+  });
+
   it("builds a member card with every sanction action", () => {
     const card = buildModerationCard({
       activePoints: 2,
@@ -92,5 +138,23 @@ describe("manual moderation Components V2", () => {
     expect(notice).toContain(
       "Подать апелляцию: https://discord.com/channels/guild/tickets",
     );
+  });
+
+  it("renders member direct messages with Components V2", () => {
+    const component = buildModerationNoticeComponents({
+      action: "timeout",
+      appealUrl: "https://discord.com/channels/guild/tickets",
+      caseNumber: 7,
+      points: 0,
+      serverName: "test",
+      summary: "повторы",
+      timeoutMinutes: 120,
+    })[0]?.toJSON();
+    const serialized = JSON.stringify(component);
+
+    expect(component?.type).toBe(ComponentType.Container);
+    expect(serialized).toContain("## Тайм-аут");
+    expect(serialized).toContain("Дело: **#0007**");
+    expect(serialized).toContain("https://discord.com/channels/guild/tickets");
   });
 });

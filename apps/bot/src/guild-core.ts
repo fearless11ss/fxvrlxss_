@@ -527,36 +527,39 @@ export async function startGuildCore(
     if (message.author.bot || isAutomodExempt(message, automodRuntime)) return;
     const decision = automodRuntime.inspect(toModerationMessage(message));
     if (decision.findings.length === 0) return;
-    await audit.publish({
-      actor: { id: message.author.id, kind: "user" },
-      category: "security",
-      discord: true,
-      eventType: "moderation.signals_observed",
-      payload: {
-        channelId: message.channelId,
-        action: decision.action,
-        findings: decision.findings,
-        messageId: message.id,
-      },
-      severity: "warning",
-      subject: {
-        channelId: message.channelId,
-        id: message.id,
-        kind: "message",
-      },
-      summary: buildAutomodLogSummary(
-        automodRuntime.config,
-        decision,
-        message.channelId,
-      ),
-      title: "Сработала автомодерация",
-    });
+    const publishSignal = () =>
+      audit.publish({
+        actor: { id: message.author.id, kind: "user" },
+        category: "security",
+        discord: true,
+        eventType: "moderation.signals_observed",
+        payload: {
+          channelId: message.channelId,
+          action: decision.action,
+          findings: decision.findings,
+          messageId: message.id,
+        },
+        severity: "warning",
+        subject: {
+          channelId: message.channelId,
+          id: message.id,
+          kind: "message",
+        },
+        summary: buildAutomodLogSummary(
+          automodRuntime.config,
+          decision,
+          message.channelId,
+        ),
+        title: "Сработала автомодерация",
+      });
     if (
       decision.action === "observe" &&
       decision.points === 0 &&
       !decision.deleteMessage
-    )
+    ) {
+      await publishSignal();
       return;
+    }
     try {
       if (moderationModule) {
         await moderationModule.applyAutomodViolation({
@@ -612,6 +615,7 @@ export async function startGuildCore(
         title: "Ошибка автомодерации",
       });
     }
+    await publishSignal();
   };
 
   safeOn(Events.MessageCreate, async (message) => {
