@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { defaultTicketConfig } from "@fxvrlxss/domain/ticket-config";
 import {
+  appealEligibilityMessage,
   buildTicketControls,
   buildTicketPanel,
   completeDeferredTicketClose,
@@ -28,6 +29,16 @@ const ticket: TicketRecord = {
 };
 
 describe("ticket Components V2", () => {
+  it("explains that a resolved appeal cannot be submitted twice", () => {
+    expect(
+      appealEligibilityMessage({
+        eligible: false,
+        reason: "already-reviewed",
+      }),
+    ).toBe(
+      "Апелляция по этому делу уже была рассмотрена. Повторное обжалование недоступно.",
+    );
+  });
   it("finishes a deferred close response even when closing fails", async () => {
     const editReply = vi.fn(() => Promise.resolve());
 

@@ -34,6 +34,7 @@ import type { Logger } from "pino";
 import type { AuditBus } from "./audit.js";
 import type { GuildResources } from "./guild-resources.js";
 import type {
+  ModerationAppealEligibility,
   ModerationAppealHandler,
   ModerationAppealOutcome,
 } from "./moderation-appeals.js";
@@ -244,6 +245,21 @@ export async function completeDeferredTicketClose(
       )
       .catch(() => undefined);
     throw error;
+  }
+}
+
+export function appealEligibilityMessage(
+  result: Exclude<ModerationAppealEligibility, { readonly eligible: true }>,
+): string {
+  switch (result.reason) {
+    case "already-open":
+      return "По этому делу уже открыта апелляция.";
+    case "already-reviewed":
+      return "Апелляция по этому делу уже была рассмотрена. Повторное обжалование недоступно.";
+    case "closed":
+      return "Дело уже закрыто и больше не подлежит обжалованию.";
+    case "not-found":
+      return "Активное дело с таким номером не найдено или оно принадлежит другому участнику.";
   }
 }
 
@@ -850,20 +866,23 @@ export class TicketModule implements TicketConfigurationApplier {
       type.key === "punishment-appeal"
         ? Number(interaction.fields.getTextInputValue("caseNumber"))
         : undefined;
-    if (
-      moderationCaseNumber !== undefined &&
-      (!Number.isInteger(moderationCaseNumber) ||
-        moderationCaseNumber < 1 ||
-        !this.#moderationAppeals ||
-        !(await this.#moderationAppeals.canAppeal(
-          moderationCaseNumber,
-          interaction.user.id,
-        )))
-    ) {
-      await interaction.editReply(
-        "Активное дело с таким номером не найдено или оно принадлежит другому участнику.",
+    if (moderationCaseNumber !== undefined) {
+      if (!Number.isInteger(moderationCaseNumber) || moderationCaseNumber < 1) {
+        await interaction.editReply("Укажите корректный номер дела.");
+        return;
+      }
+      if (!this.#moderationAppeals) {
+        await interaction.editReply("Проверка дел временно недоступна.");
+        return;
+      }
+      const eligibility = await this.#moderationAppeals.checkAppeal(
+        moderationCaseNumber,
+        interaction.user.id,
       );
-      return;
+      if (!eligibility.eligible) {
+        await interaction.editReply(appealEligibilityMessage(eligibility));
+        return;
+      }
     }
     const reservation = await this.#repository.reserve({
       authorId: interaction.user.id,

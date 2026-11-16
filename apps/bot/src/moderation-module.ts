@@ -28,9 +28,10 @@ import {
 import type { Logger } from "pino";
 
 import type { AuditBus } from "./audit.js";
-import type {
-  ModerationAppealHandler,
-  ModerationAppealOutcome,
+import {
+  assessModerationAppeal,
+  type ModerationAppealHandler,
+  type ModerationAppealOutcome,
 } from "./moderation-appeals.js";
 import type { ModerationConfigurationApplier } from "./moderation-publication.js";
 import type {
@@ -585,14 +586,9 @@ export class ModerationModule
     };
   }
 
-  async canAppeal(number: number, userId: string): Promise<boolean> {
+  async checkAppeal(number: number, userId: string) {
     const item = await this.#repository.findByNumber(this.#guild.id, number);
-    return Boolean(
-      item &&
-      item.userId === userId &&
-      item.status === "open" &&
-      item.appealOutcome === null,
-    );
+    return assessModerationAppeal(item, userId);
   }
 
   async beginAppeal(number: number, userId: string): Promise<boolean> {
