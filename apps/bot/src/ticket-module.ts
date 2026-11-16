@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import {
   defaultTicketConfig,
   ticketConfigSchema,
@@ -85,7 +87,10 @@ function ticketType(config: TicketConfig, key: string) {
   return config.types.find((type) => type.key === key);
 }
 
-export function buildTicketPanel(config: TicketConfig): ContainerBuilder[] {
+export function buildTicketPanel(
+  config: TicketConfig,
+  renderId: string = randomUUID(),
+): ContainerBuilder[] {
   const enabledTypes = config.types.filter((type) => type.enabled);
   const options =
     enabledTypes.length > 0
@@ -102,7 +107,7 @@ export function buildTicketPanel(config: TicketConfig): ContainerBuilder[] {
           },
         ];
   const select = new StringSelectMenuBuilder()
-    .setCustomId(PANEL_SELECT_ID)
+    .setCustomId(`${PANEL_SELECT_ID}:${renderId}`)
     .setDisabled(!config.enabled || enabledTypes.length === 0)
     .setMaxValues(1)
     .setMinValues(1)
@@ -485,7 +490,11 @@ export class TicketModule implements TicketConfigurationApplier {
         : "";
     if (!customId.startsWith("ticket:")) return false;
 
-    if (interaction.isStringSelectMenu() && customId === PANEL_SELECT_ID) {
+    if (
+      interaction.isStringSelectMenu() &&
+      (customId === PANEL_SELECT_ID ||
+        customId.startsWith(`${PANEL_SELECT_ID}:`))
+    ) {
       const key = interaction.values[0];
       const type = key ? ticketType(this.#config, key) : undefined;
       if (!this.#config.enabled || !type?.enabled) {
@@ -496,6 +505,11 @@ export class TicketModule implements TicketConfigurationApplier {
         return true;
       }
       await interaction.showModal(openTicketModal(type.key, type.label));
+      await interaction.message.edit({
+        allowedMentions: { parse: [] },
+        components: buildTicketPanel(this.#config),
+        flags: MessageFlags.IsComponentsV2,
+      });
       return true;
     }
 

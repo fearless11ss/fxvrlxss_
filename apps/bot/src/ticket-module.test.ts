@@ -97,6 +97,19 @@ describe("ticket Components V2", () => {
     expect(JSON.stringify(panel)).toContain("Сотрудничество");
   });
 
+  it("gives every panel render a fresh select identity", () => {
+    const first = JSON.stringify(
+      buildTicketPanel(defaultTicketConfig, "render-1"),
+    );
+    const second = JSON.stringify(
+      buildTicketPanel(defaultTicketConfig, "render-2"),
+    );
+
+    expect(first).not.toBe(second);
+    expect(first).toContain("ticket:type:render-1");
+    expect(second).toContain("ticket:type:render-2");
+  });
+
   it("renders ticket identity and staff controls", () => {
     const controls = buildTicketControls(
       ticket,
