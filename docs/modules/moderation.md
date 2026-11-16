@@ -37,11 +37,12 @@ policy never rewrites existing cases.
 
 The punishment-appeal ticket requires an active case belonging to its author.
 Ban notifications identify the source guild and include a permanent invitation
-to the dedicated appeal guild. Approval resolves the main-guild case and
-removes its points. It also removes a timeout, quarantine role, or ban when
-possible. A kick or deleted message cannot be restored. Denial leaves the case
-active; author closure records withdrawal. Appeal decisions are final and
-linked tickets cannot be reopened.
+to the dedicated appeal guild. Other sanctions link directly to the main
+guild's ticket panel. Approval resolves the main-guild case and removes its
+points. It also removes a timeout, quarantine role, or ban when possible. A kick
+or deleted message cannot be restored. Denial leaves the case active; author
+closure records withdrawal. Appeal decisions are final and linked tickets
+cannot be reopened.
 
 ## Invariants
 

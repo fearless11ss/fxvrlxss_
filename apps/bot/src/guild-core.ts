@@ -342,6 +342,7 @@ export async function startGuildCore(
         logger,
         quarantineRoleId: resources.roles.quarantine,
         repository: options.moderationRepository,
+        ticketChannelId: resources.channels.support.openTicket,
       })
     : undefined;
   const moderationPublicationWorker =

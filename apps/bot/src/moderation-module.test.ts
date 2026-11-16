@@ -52,23 +52,45 @@ describe("manual moderation Components V2", () => {
     expect(serialized).toContain("moderation:history:user-1");
   });
 
-  it("identifies the server and gives banned members an appeal invite", () => {
+  it("uses a short informal ban notice with the external appeal invite", () => {
     const notice = buildModerationNotice({
-      activePoints: 6,
-      appealInviteUrl: "https://discord.gg/appeal",
-      appliedAction: "Бан + удаление сообщения",
+      action: "ban",
+      appealUrl: "https://discord.gg/appeal",
       caseNumber: 12,
-      channelName: "чат",
-      heading: "Автомодерация зафиксировала нарушение.",
       points: 6,
-      reasonLabel: "Нарушение",
       serverName: "fxvrlxss_",
       summary: "стороннее приглашение Discord",
     });
 
-    expect(notice).toContain("Сервер: **fxvrlxss\\_**");
-    expect(notice).toContain("Канал: **#чат**");
-    expect(notice).toContain("Дело: #0012");
-    expect(notice).toContain("https://discord.gg/appeal");
+    expect(notice).toBe(
+      [
+        "Вы получили бан на сервере **fxvrlxss\\_**.",
+        "Причина — стороннее приглашение Discord.",
+        "Дело: **#0012**",
+        "",
+        "Подать апелляцию: https://discord.gg/appeal",
+      ].join("\n"),
+    );
+    expect(notice).not.toContain("удален");
+    expect(notice).not.toContain("#чат");
+  });
+
+  it("sends non-ban sanctions to the main ticket channel", () => {
+    const notice = buildModerationNotice({
+      action: "timeout",
+      appealUrl: "https://discord.com/channels/guild/tickets",
+      caseNumber: 13,
+      points: 0,
+      serverName: "fxvrlxss_",
+      summary: "флуд",
+      timeoutMinutes: 60,
+    });
+
+    expect(notice).toContain(
+      "Вы получили тайм-аут на сервере **fxvrlxss\\_** на **60 мин.**.",
+    );
+    expect(notice).toContain(
+      "Подать апелляцию: https://discord.com/channels/guild/tickets",
+    );
   });
 });

@@ -51,10 +51,13 @@ Point awards, timeouts, quarantine, kicks, and bans create appealable cases. A
 plain deletion with no points creates only an audit event and cannot be
 appealed.
 
-Before an action, the bot sends the member the violation, action, points, total,
-case number, and appeal hint by direct message. If DMs are closed, it mentions
-the member in the source channel without exposing evidence and deletes the
-notice after one minute.
+Before a sanction, the bot sends the member a short direct message naming the
+server, sanction, reason, case number, and appeal link. Ban notices lead to the
+dedicated appeal guild; all other sanctions lead to the main guild's ticket
+panel. Message deletion is intentionally omitted from member-facing notices,
+and deletion without another sanction sends no notice. If DMs are closed, the
+bot mentions the member in the source channel and deletes the notice after one
+minute.
 
 ## Invariants
 

@@ -70,6 +70,9 @@ export interface AutomodViolationResult {
   readonly caseNumber: number | null;
 }
 
+export type ModerationNoticeAction =
+  "ban" | "kick" | "points" | "quarantine" | "timeout" | "warn";
+
 const automatedActionLabels: Readonly<
   Record<AutomatedModerationAction, string>
 > = {
@@ -101,37 +104,52 @@ function caseNumber(value: number): string {
 }
 
 export function buildModerationNotice(input: {
-  readonly activePoints: number;
-  readonly appealInviteUrl?: string;
-  readonly appliedAction: string;
+  readonly action: ModerationNoticeAction;
+  readonly appealUrl?: string;
   readonly caseNumber: number | null;
-  readonly channelName?: string;
-  readonly heading: string;
   readonly points: number;
-  readonly reasonLabel: string;
   readonly serverName: string;
   readonly summary: string;
+  readonly timeoutMinutes?: number | null;
 }): string {
+  const server = `**${escapeMarkdown(input.serverName)}**`;
+  const opening = (() => {
+    switch (input.action) {
+      case "ban":
+        return `Вы получили бан на сервере ${server}.`;
+      case "kick":
+        return `Вас исключили с сервера ${server}.`;
+      case "points":
+        return `Вы получили **${input.points} ${pointWord(input.points)}** на сервере ${server}.`;
+      case "quarantine":
+        return `Вы попали в карантин на сервере ${server}.`;
+      case "timeout":
+        return `Вы получили тайм-аут на сервере ${server}${input.timeoutMinutes ? ` на **${input.timeoutMinutes} мин.**` : ""}.`;
+      case "warn":
+        return `Вы получили предупреждение на сервере ${server}.`;
+    }
+  })();
+  const summary = escapeMarkdown(input.summary.trim());
+  const reason = `Причина — ${summary}${/[.!?…]$/u.test(summary) ? "" : "."}`;
   return [
-    input.heading,
-    `Сервер: **${escapeMarkdown(input.serverName)}**`,
-    input.channelName
-      ? `Канал: **#${escapeMarkdown(input.channelName)}**`
+    opening,
+    reason,
+    input.caseNumber ? `Дело: **#${caseNumber(input.caseNumber)}**` : undefined,
+    input.caseNumber && input.appealUrl
+      ? `\nПодать апелляцию: ${input.appealUrl}`
       : undefined,
-    `${input.reasonLabel}: ${escapeMarkdown(input.summary)}`,
-    `Действие: ${input.appliedAction}.`,
-    input.points > 0
-      ? `Баллы: +${input.points} · всего ${input.activePoints}.`
-      : undefined,
-    input.caseNumber ? `Дело: #${caseNumber(input.caseNumber)}.` : undefined,
-    input.caseNumber && input.appealInviteUrl
-      ? `Обжалование бана: ${input.appealInviteUrl}`
-      : input.caseNumber
-        ? "Обжалование: через тикеты сервера."
-        : undefined,
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n");
+}
+
+function pointWord(value: number): string {
+  const remainder100 = Math.abs(value) % 100;
+  const remainder10 = remainder100 % 10;
+  if (remainder100 >= 11 && remainder100 <= 14) return "баллов";
+  if (remainder10 === 1) return "балл";
+  if (remainder10 >= 2 && remainder10 <= 4) return "балла";
+  return "баллов";
 }
 
 function actionButton(action: ModerationAction, userId: string): ButtonBuilder {
@@ -322,6 +340,7 @@ export class ModerationModule
   readonly #logger: Logger;
   readonly #quarantineRoleId: string;
   readonly #repository: ModerationRepository;
+  readonly #ticketUrl: string;
   #config: ModerationConfig;
 
   constructor(options: {
@@ -331,6 +350,7 @@ export class ModerationModule
     readonly logger: Logger;
     readonly quarantineRoleId: string;
     readonly repository: ModerationRepository;
+    readonly ticketChannelId: string;
   }) {
     this.#appealInviteUrl = options.appealInviteUrl;
     this.#audit = options.audit;
@@ -338,6 +358,7 @@ export class ModerationModule
     this.#logger = options.logger;
     this.#quarantineRoleId = options.quarantineRoleId;
     this.#repository = options.repository;
+    this.#ticketUrl = `https://discord.com/channels/${options.guild.id}/${options.ticketChannelId}`;
     this.#config = {
       ...defaultModerationConfig,
       staffRoleIds: options.guild.roles.cache
@@ -464,20 +485,22 @@ export class ModerationModule
         ? "удаление сообщения"
         : `${primaryAction} + удаление сообщения`
       : primaryAction;
-    await this.#notifyMember({
-      activePoints,
-      appliedAction,
-      ...(decision.action === "ban" && this.#appealInviteUrl
-        ? { appealInviteUrl: this.#appealInviteUrl }
-        : {}),
-      caseNumber: item?.number ?? null,
-      channelId: input.channelId,
-      heading: "Автомодерация зафиксировала нарушение.",
-      points: input.points,
-      reasonLabel: "Нарушение",
-      summary: input.summary,
-      userId: input.userId,
-    });
+    if (item) {
+      await this.#notifyMember({
+        action:
+          decision.action !== "warn"
+            ? decision.action
+            : input.action === "points" || input.action === "quarantine"
+              ? input.action
+              : "warn",
+        caseNumber: item.number,
+        channelId: input.channelId,
+        points: input.points,
+        summary: input.summary,
+        timeoutMinutes: decision.timeoutMinutes,
+        userId: input.userId,
+      });
+    }
 
     try {
       if (input.message && input.deleteMessage) {
@@ -820,17 +843,12 @@ export class ModerationModule
         })
       ).record;
       await this.#notifyMember({
-        activePoints,
-        appliedAction: actionLabels[decision.action],
-        ...(decision.action === "ban" && this.#appealInviteUrl
-          ? { appealInviteUrl: this.#appealInviteUrl }
-          : {}),
+        action: decision.action,
         caseNumber: item.number,
         ...(interaction.channelId ? { channelId: interaction.channelId } : {}),
-        heading: "К вам применено действие модерации.",
         points,
-        reasonLabel: "Причина",
         summary: reason,
+        timeoutMinutes: decision.timeoutMinutes,
         userId,
       });
       try {
@@ -1005,33 +1023,27 @@ export class ModerationModule
   }
 
   async #notifyMember(input: {
-    readonly activePoints: number;
-    readonly appliedAction: string;
-    readonly appealInviteUrl?: string;
+    readonly action: ModerationNoticeAction;
     readonly caseNumber: number | null;
     readonly channelId?: string;
-    readonly heading: string;
     readonly points: number;
-    readonly reasonLabel: string;
     readonly summary: string;
+    readonly timeoutMinutes?: number | null;
     readonly userId: string;
   }): Promise<void> {
-    const sourceChannel = input.channelId
-      ? this.#guild.channels.cache.get(input.channelId)
-      : undefined;
     const content = buildModerationNotice({
-      activePoints: input.activePoints,
-      ...(input.appealInviteUrl
-        ? { appealInviteUrl: input.appealInviteUrl }
-        : {}),
-      appliedAction: input.appliedAction,
+      action: input.action,
+      appealUrl:
+        input.action === "ban"
+          ? (this.#appealInviteUrl ?? this.#ticketUrl)
+          : this.#ticketUrl,
       caseNumber: input.caseNumber,
-      ...(sourceChannel ? { channelName: sourceChannel.name } : {}),
-      heading: input.heading,
       points: input.points,
-      reasonLabel: input.reasonLabel,
       serverName: this.#guild.name,
       summary: input.summary,
+      ...(input.timeoutMinutes === undefined
+        ? {}
+        : { timeoutMinutes: input.timeoutMinutes }),
     });
     const user = await this.#guild.client.users.fetch(input.userId);
     const delivered = await user
