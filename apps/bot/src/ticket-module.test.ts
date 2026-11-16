@@ -62,6 +62,8 @@ describe("ticket Components V2", () => {
 
     expect(serialized).toContain("Тикет #0042");
     expect(serialized).toContain("<@user-1>");
+    expect(serialized).toContain("**Тема:** Нужна помощь");
+    expect(serialized).toContain("**Описание:** Подробное описание обращения");
     expect(serialized).toContain("ticket:claim");
     expect(serialized).toContain("ticket:close");
   });

@@ -2,7 +2,17 @@ import { randomUUID } from "node:crypto";
 
 import type { Database } from "@fxvrlxss/database/client";
 import { tickets } from "@fxvrlxss/database/schema";
-import { and, asc, eq, inArray, isNull, like, lt, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  like,
+  lt,
+  sql,
+} from "drizzle-orm";
 
 import type {
   TicketRecord,
@@ -255,16 +265,14 @@ export class DatabaseTicketRepository implements TicketRepository {
     return rows.map(record);
   }
 
-  async findClosedWithChannels(
-    guildId: string,
-  ): Promise<readonly TicketRecord[]> {
+  async findWithChannels(guildId: string): Promise<readonly TicketRecord[]> {
     const rows = await this.#database
       .select()
       .from(tickets)
       .where(
         and(
           eq(tickets.guildId, guildId),
-          eq(tickets.status, "closed"),
+          isNotNull(tickets.controlMessageId),
           isNull(tickets.channelDeletedAt),
         ),
       )

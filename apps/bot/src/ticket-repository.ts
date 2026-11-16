@@ -53,7 +53,7 @@ export interface TicketRepository {
     transcript: readonly TicketTranscriptEntry[] | null,
   ): Promise<TicketRecord | null>;
   findByChannel(channelId: string): Promise<TicketRecord | null>;
-  findClosedWithChannels(guildId: string): Promise<readonly TicketRecord[]>;
+  findWithChannels(guildId: string): Promise<readonly TicketRecord[]>;
   findInactive(guildId: string, before: Date): Promise<readonly TicketRecord[]>;
   markChannelDeleted(channelId: string): Promise<TicketRecord | null>;
   reopen(channelId: string): Promise<TicketRecord | null>;

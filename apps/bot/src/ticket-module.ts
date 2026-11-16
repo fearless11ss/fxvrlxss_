@@ -192,8 +192,9 @@ export function buildTicketControls(
             ? `Дело модерации: **#${ticketNumber(ticket.moderationCaseNumber)}**`
             : undefined,
           `Статус: ${status}`,
-          `**${escapeMarkdown(ticket.subject)}**`,
-          escapeMarkdown(ticket.description),
+          "",
+          `**Тема:** ${escapeMarkdown(ticket.subject)}`,
+          `**Описание:** ${escapeMarkdown(ticket.description)}`,
         ]
           .filter((line): line is string => Boolean(line))
           .join("\n"),
@@ -392,7 +393,7 @@ export class TicketModule implements TicketConfigurationApplier {
 
   async start(): Promise<void> {
     await this.#ensurePanel();
-    await this.#refreshClosedControls();
+    await this.#refreshControls();
     this.#timer = setInterval(() => void this.#closeInactive(), 60_000);
     this.#timer.unref();
   }
@@ -406,7 +407,7 @@ export class TicketModule implements TicketConfigurationApplier {
   async apply(config: TicketConfig): Promise<void> {
     this.#config = ticketConfigSchema.parse(config);
     await this.#ensurePanel();
-    await this.#refreshClosedControls();
+    await this.#refreshControls();
   }
 
   async handleMessage(message: Message): Promise<boolean> {
@@ -953,10 +954,8 @@ export class TicketModule implements TicketConfigurationApplier {
     });
   }
 
-  async #refreshClosedControls(): Promise<void> {
-    const tickets = await this.#repository.findClosedWithChannels(
-      this.#guild.id,
-    );
+  async #refreshControls(): Promise<void> {
+    const tickets = await this.#repository.findWithChannels(this.#guild.id);
     for (const ticket of tickets) {
       try {
         await this.#updateControl(ticket);
@@ -965,13 +964,13 @@ export class TicketModule implements TicketConfigurationApplier {
           await this.#repository.markChannelDeleted(ticket.channelId);
           this.#logger.info(
             { channelId: ticket.channelId, ticketNumber: ticket.number },
-            "missing closed ticket channel marked as deleted",
+            "missing ticket channel marked as deleted",
           );
           continue;
         }
         this.#logger.error(
           { channelId: ticket.channelId, error, ticketNumber: ticket.number },
-          "closed ticket controls refresh failed",
+          "ticket controls refresh failed",
         );
       }
     }
