@@ -1,11 +1,7 @@
 import {
   ChannelType,
-  ContainerBuilder,
   Events,
-  MessageFlags,
   PermissionFlagsBits,
-  TextDisplayBuilder,
-  escapeMarkdown,
   type Client,
   type Guild,
   type Interaction,
@@ -119,42 +115,6 @@ async function ensureTextChannel(
   });
 }
 
-async function ensurePinnedCard(
-  channel: TextChannel,
-  marker: string,
-  content: string,
-): Promise<void> {
-  const pins = await channel.messages.fetchPins({ limit: 50 });
-  const existing = pins.items
-    .map(({ message }) => message)
-    .find(
-      (message) =>
-        message.author.id === channel.client.user.id &&
-        JSON.stringify(
-          message.components.map((item) => item.toJSON()),
-        ).includes(marker),
-    );
-  const components = [
-    new ContainerBuilder()
-      .setAccentColor(0xf2f2ef)
-      .addTextDisplayComponents(new TextDisplayBuilder().setContent(content)),
-  ];
-  if (existing) {
-    await existing.edit({
-      allowedMentions: { parse: [] },
-      components,
-      flags: MessageFlags.IsComponentsV2,
-    });
-    return;
-  }
-  const message = await channel.send({
-    allowedMentions: { parse: [] },
-    components,
-    flags: MessageFlags.IsComponentsV2,
-  });
-  await message.pin("fxvrlxss_ appeal server information");
-}
-
 function staffOverwrites(
   guild: Guild,
   staffRoleIds: readonly string[],
@@ -174,6 +134,63 @@ function staffOverwrites(
       id,
     })),
   ];
+}
+
+async function ensureAppealInterfaceChannel(
+  guild: Guild,
+  categoryId: string,
+  permissionOverwrites: readonly OverwriteResolvable[],
+): Promise<TextChannel> {
+  const legacyEntry = guild.channels.cache.find(
+    (channel) =>
+      channel.type === ChannelType.GuildText && channel.name === "прихожая",
+  );
+  const currentInterface = guild.channels.cache.find(
+    (channel) =>
+      channel.type === ChannelType.GuildText &&
+      channel.name === "открыть-апелляцию" &&
+      channel.parentId === categoryId,
+  );
+  if (legacyEntry?.type !== ChannelType.GuildText) {
+    if (currentInterface?.type === ChannelType.GuildText) {
+      return currentInterface;
+    }
+    return ensureTextChannel(
+      guild,
+      "открыть-апелляцию",
+      permissionOverwrites,
+      categoryId,
+    );
+  }
+  if (
+    currentInterface?.type === ChannelType.GuildText &&
+    currentInterface.id !== legacyEntry.id
+  ) {
+    await currentInterface.delete(
+      "Replaced by the existing invited appeal interface channel",
+    );
+  }
+  return legacyEntry.edit({
+    name: "открыть-апелляцию",
+    parent: categoryId,
+    permissionOverwrites: [...permissionOverwrites],
+    reason: "Migrate the appeal server to a single public interface",
+  });
+}
+
+async function removeLegacyPublicChannels(
+  guild: Guild,
+  interfaceChannelId: string,
+): Promise<void> {
+  const obsolete = guild.channels.cache.filter(
+    (channel) =>
+      channel.type === ChannelType.GuildText &&
+      channel.id !== interfaceChannelId &&
+      (channel.name === "прихожая" || channel.name === "правила"),
+  );
+  for (const channel of obsolete.values()) {
+    await channel.delete("Remove obsolete appeal server public channel");
+  }
 }
 
 export async function prepareAppealGuild(
@@ -204,15 +221,13 @@ export async function prepareAppealGuild(
       id: guild.roles.everyone.id,
     },
   ];
-  const entry = await ensureTextChannel(guild, "прихожая", publicReadOnly);
-  const rules = await ensureTextChannel(guild, "правила", publicReadOnly);
   const appealCategory = await ensureCategory(guild, "АПЕЛЛЯЦИИ", hidden);
-  const openTicket = await ensureTextChannel(
+  const openTicket = await ensureAppealInterfaceChannel(
     guild,
-    "открыть-апелляцию",
-    publicReadOnly,
     appealCategory.id,
+    publicReadOnly,
   );
+  await removeLegacyPublicChannels(guild, openTicket.id);
   const teamCategory = await ensureCategory(
     guild,
     "КОМАНДА",
@@ -236,39 +251,17 @@ export async function prepareAppealGuild(
     logsCategory.id,
   );
 
-  await ensurePinnedCard(
-    entry,
-    "Сервер апелляций",
-    [
-      "## Сервер апелляций",
-      `Этот сервер принимает обжалования наказаний с сервера **${escapeMarkdown("fxvrlxss_")}**.`,
-      "Перед обращением подготовьте номер дела из уведомления бота.",
-      `Открыть обращение: <#${openTicket.id}>`,
-    ].join("\n"),
-  );
-  await ensurePinnedCard(
-    rules,
-    "Правила апелляций",
-    [
-      "## Правила апелляций",
-      "1. Одно активное дело можно обжаловать один раз.",
-      "2. Укажите номер дела и спокойно изложите основания для пересмотра.",
-      "3. Не создавайте повторные обращения и не давите на сотрудников.",
-      "4. Решение по закрытой апелляции окончательное.",
-    ].join("\n"),
-  );
-
   const invites = await guild.invites.fetch();
   const existingInvite = invites.find(
     (invite) =>
-      invite.channelId === entry.id &&
+      invite.channelId === openTicket.id &&
       invite.inviter?.id === client.user?.id &&
       invite.maxAge === 0 &&
       invite.maxUses === 0,
   );
   const invite =
     existingInvite ??
-    (await entry.createInvite({
+    (await openTicket.createInvite({
       maxAge: 0,
       maxUses: 0,
       reason: "Permanent fxvrlxss_ appeal server invite",
@@ -276,7 +269,7 @@ export async function prepareAppealGuild(
     }));
   const resources: GuildResources = {
     channels: {
-      entry: entry.id,
+      entry: openTicket.id,
       logs: {
         bot: logs.id,
         messages: logs.id,

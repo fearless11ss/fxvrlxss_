@@ -79,13 +79,10 @@ members remain. Their lifecycle is documented in
 
 ## Appeal server
 
-Banned members use a separate, minimal guild. The bot creates missing roles and
-channels additively and runs only the appeal-ticket module there.
+Banned members use a separate, minimal guild. The only public channel is the
+appeal interface. The bot runs only the appeal-ticket module there.
 
 ```text
-прихожая
-правила
-
 АПЕЛЛЯЦИИ
 ├─ открыть-апелляцию
 └─ создаваемые тикеты

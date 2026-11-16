@@ -46,8 +46,9 @@ Docker Compose expects the files documented in
 environment blocks.
 
 Set `DISCORD_APPEAL_GUILD_ID` to enable the dedicated appeal guild. The same bot
-must already be a member with Administrator permission. Startup additively
-creates the appeal structure and a permanent invitation; it never deletes
+must already be a member with Administrator permission. Startup creates the
+appeal structure and a permanent invitation. It may migrate and remove the
+legacy bot-managed `прихожая` and `правила` channels, but never deletes
 unrelated roles or channels.
 
 Before starting Compose, assign the secret files to `root:<deployment-group>`
