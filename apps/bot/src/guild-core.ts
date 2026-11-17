@@ -51,6 +51,12 @@ import {
 } from "./guild-resource-catalog.js";
 import type { MessageArchiveReader } from "./message-archive.js";
 import {
+  describeMemberRoleChange,
+  findMemberRoleAuditContext,
+  type MemberRoleAuditContext,
+  type MemberRoleReference,
+} from "./member-role-log.js";
+import {
   describeMemberTimeoutChange,
   findMemberTimeoutAuditContext,
   type MemberTimeoutAuditContext,
@@ -300,6 +306,30 @@ async function fetchMemberTimeoutAuditContext(
   return null;
 }
 
+async function fetchMemberRoleAuditContext(
+  guild: Guild,
+  userId: string,
+  addedRoles: readonly MemberRoleReference[],
+  removedRoles: readonly MemberRoleReference[],
+  occurredAt: number,
+): Promise<MemberRoleAuditContext | null> {
+  for (const waitMs of [0, 350, 750]) {
+    if (waitMs > 0) await delay(waitMs);
+    const logs = await guild.fetchAuditLogs({
+      limit: 8,
+      type: AuditLogEvent.MemberRoleUpdate,
+    });
+    const context = findMemberRoleAuditContext([...logs.entries.values()], {
+      addedRoleIds: addedRoles.map(({ id }) => id),
+      occurredAt,
+      removedRoleIds: removedRoles.map(({ id }) => id),
+      userId,
+    });
+    if (context) return context;
+  }
+  return null;
+}
+
 async function registerStatusCommand(guild: Guild) {
   const command = new SlashCommandBuilder()
     .setName("статус")
@@ -335,6 +365,11 @@ export async function startGuildCore(
     });
   };
   const guild = await client.guilds.fetch(guildId);
+  const members = await guild.members.fetch();
+  logger.info(
+    { guildId, memberCount: members.size },
+    "guild member cache hydrated",
+  );
   const resources = await resolveGuildResources(guild);
   const refreshGuildResourceCatalog = async () => {
     await options.guildResourceCatalogWriter?.replace(
@@ -504,10 +539,10 @@ export async function startGuildCore(
     if (after.guild.id !== guildId) return;
     const addedRoles = after.roles.cache
       .filter((role) => !before.roles.cache.has(role.id))
-      .map((role) => role.name);
+      .map(({ id, name }) => ({ id, name }));
     const removedRoles = before.roles.cache
       .filter((role) => !after.roles.cache.has(role.id))
-      .map((role) => role.name);
+      .map(({ id, name }) => ({ id, name }));
     const nicknameChanged = before.nickname !== after.nickname;
     const timeoutChanged =
       before.communicationDisabledUntilTimestamp !==
@@ -520,13 +555,31 @@ export async function startGuildCore(
     ) {
       return;
     }
+    const occurredAt = Date.now();
+    let roleAuditContext: MemberRoleAuditContext | null = null;
+    if (addedRoles.length > 0 || removedRoles.length > 0) {
+      try {
+        roleAuditContext = await fetchMemberRoleAuditContext(
+          after.guild,
+          after.id,
+          addedRoles,
+          removedRoles,
+          occurredAt,
+        );
+      } catch (error) {
+        logger.warn(
+          { error, userId: after.id },
+          "member role audit context unavailable",
+        );
+      }
+    }
     let timeoutAuditContext: MemberTimeoutAuditContext | null = null;
     if (timeoutChanged) {
       try {
         timeoutAuditContext = await fetchMemberTimeoutAuditContext(
           after.guild,
           after.id,
-          Date.now(),
+          occurredAt,
         );
       } catch (error) {
         logger.warn(
@@ -542,19 +595,30 @@ export async function startGuildCore(
           timeoutAuditContext,
         )
       : null;
+    const roleChange = describeMemberRoleChange({
+      addedRoles,
+      auditContext: roleAuditContext,
+      removedRoles,
+    });
+
+    if (!roleChange && !nicknameChanged && !timeoutChange) return;
+
+    const actorId = timeoutAuditContext?.actorId ?? roleChange?.actorId;
 
     await audit.publish({
-      ...(timeoutAuditContext
-        ? { actor: { id: timeoutAuditContext.actorId, kind: "user" as const } }
-        : {}),
+      ...(actorId ? { actor: { id: actorId, kind: "user" as const } } : {}),
       category: timeoutChanged ? "moderation" : "server",
       discord: true,
       eventType: timeoutChanged ? "member.timeout_changed" : "member.updated",
       payload: {
-        addedRoles,
+        addedRoleIds: addedRoles.map(({ id }) => id),
+        addedRoles: addedRoles.map(({ name }) => name),
         nicknameAfter: after.nickname,
         nicknameBefore: before.nickname,
-        removedRoles,
+        removedRoleIds: removedRoles.map(({ id }) => id),
+        removedRoles: removedRoles.map(({ name }) => name),
+        roleAuditActorId: roleAuditContext?.actorId,
+        roleAuditReason: roleAuditContext?.reason,
         timeoutAfter: after.communicationDisabledUntil?.toISOString(),
         timeoutAuditActorId: timeoutAuditContext?.actorId,
         timeoutAuditReason: timeoutAuditContext?.reason,
@@ -562,18 +626,13 @@ export async function startGuildCore(
       },
       subject: { id: after.id, kind: "user" },
       summary: [
-        addedRoles.length > 0
-          ? `Добавлены роли: ${addedRoles.join(", ")}.`
-          : "",
-        removedRoles.length > 0
-          ? `Сняты роли: ${removedRoles.join(", ")}.`
-          : "",
+        roleChange?.summary ?? "",
         nicknameChanged ? "Изменён никнейм." : "",
         timeoutChange?.summary ?? "",
       ]
         .filter(Boolean)
-        .join(" "),
-      title: timeoutChange?.title ?? "Изменён участник",
+        .join("\n"),
+      title: timeoutChange?.title ?? roleChange?.title ?? "Изменён участник",
     });
   });
 
