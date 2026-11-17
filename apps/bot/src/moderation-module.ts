@@ -40,6 +40,7 @@ import type {
 } from "./moderation-repository.js";
 
 const COMMAND_NAME = "модерация";
+const AUTOMOD_SANCTION_COOLDOWN_MS = 15_000;
 const actionLabels: Readonly<Record<ModerationAction, string>> = {
   ban: "Бан",
   kick: "Кик",
@@ -49,6 +50,8 @@ const actionLabels: Readonly<Record<ModerationAction, string>> = {
 
 export type AutomatedModerationAction =
   "observe" | "points" | "timeout" | "quarantine" | "kick" | "ban";
+
+type AutomodSanction = "timeout" | "quarantine" | "kick" | "ban";
 
 export interface AutomodViolationInput {
   readonly action: AutomatedModerationAction;
@@ -69,6 +72,7 @@ export interface AutomodViolationResult {
   readonly activePoints: number;
   readonly appliedAction: string;
   readonly caseNumber: number | null;
+  readonly sanctionSuppressed: boolean;
 }
 
 export type ModerationNoticeAction =
@@ -370,6 +374,7 @@ export class ModerationModule
   readonly #appealInviteUrl: string | undefined;
   readonly #audit: AuditBus;
   readonly #automodQueues = new Map<string, Promise<void>>();
+  readonly #automodSanctionCooldowns = new Map<string, number>();
   readonly #guild: Guild;
   readonly #logger: Logger;
   readonly #quarantineRoleId: string;
@@ -476,13 +481,33 @@ export class ModerationModule
             timeoutMinutes:
               requestedAction === "timeout" ? input.timeoutMinutes : null,
           };
+    const sanction: AutomodSanction | null =
+      input.action === "quarantine" && decision.action === "warn"
+        ? "quarantine"
+        : decision.action === "warn"
+          ? null
+          : decision.action;
+    const sanctionSuppressed = sanction
+      ? this.#isAutomodSanctionCoolingDown(input.userId, sanction)
+      : false;
+    if (sanctionSuppressed && input.points === 0) {
+      return {
+        activePoints,
+        appliedAction: `${automatedActionLabels[input.action]} уже применён`,
+        caseNumber: null,
+        sanctionSuppressed: true,
+      };
+    }
+    const effectiveDecision = sanctionSuppressed
+      ? { action: "warn" as const, escalated: false, timeoutMinutes: null }
+      : decision;
     const tracked =
       input.points > 0 ||
       ["timeout", "quarantine", "kick", "ban"].includes(input.action);
     let item: ModerationCaseRecord | undefined;
     if (tracked) {
       const creation = await this.#repository.create({
-        appliedAction: decision.action,
+        appliedAction: effectiveDecision.action,
         evidence: {
           automodAction: input.action,
           channelId: input.channelId,
@@ -503,7 +528,7 @@ export class ModerationModule
         requestedAction,
         sourceEventKey: input.sourceEventKey,
         summary: input.summary,
-        timeoutMinutes: decision.timeoutMinutes,
+        timeoutMinutes: effectiveDecision.timeoutMinutes,
         userId: input.userId,
       });
       item = creation.record;
@@ -512,13 +537,14 @@ export class ModerationModule
           activePoints: previousPoints,
           appliedAction: caseActionLabel(item),
           caseNumber: item.number,
+          sanctionSuppressed,
         };
       }
     }
 
     const primaryAction =
-      decision.action !== "warn"
-        ? actionLabels[decision.action]
+      effectiveDecision.action !== "warn"
+        ? actionLabels[effectiveDecision.action]
         : automatedActionLabels[input.action];
     const appliedAction = input.deleteMessage
       ? input.action === "observe" && decision.action === "warn"
@@ -528,8 +554,8 @@ export class ModerationModule
     if (item) {
       await this.#notifyMember({
         action:
-          decision.action !== "warn"
-            ? decision.action
+          effectiveDecision.action !== "warn"
+            ? effectiveDecision.action
             : input.action === "points" || input.action === "quarantine"
               ? input.action
               : "warn",
@@ -537,20 +563,20 @@ export class ModerationModule
         channelId: input.channelId,
         points: input.points,
         summary: input.summary,
-        timeoutMinutes: decision.timeoutMinutes,
+        timeoutMinutes: effectiveDecision.timeoutMinutes,
         userId: input.userId,
       });
     }
 
     try {
       const target =
-        input.action === "quarantine" || decision.action !== "warn"
+        input.action === "quarantine" || effectiveDecision.action !== "warn"
           ? await this.#guild.members.fetch(input.userId)
           : undefined;
       if (
         input.action === "quarantine" &&
-        decision.action !== "kick" &&
-        decision.action !== "ban"
+        effectiveDecision.action !== "kick" &&
+        effectiveDecision.action !== "ban"
       ) {
         if (!target) throw new Error("Участник не найден");
         if (!target.manageable) {
@@ -561,14 +587,17 @@ export class ModerationModule
           `fxvrlxss_ automod: ${input.summary}`.slice(0, 500),
         );
       }
-      if (decision.action !== "warn") {
+      if (effectiveDecision.action !== "warn") {
         if (!target) throw new Error("Участник не найден");
         await this.#applyDiscordAction(
           target,
-          decision.action,
+          effectiveDecision.action,
           input.summary,
-          decision.timeoutMinutes,
+          effectiveDecision.timeoutMinutes,
         );
+      }
+      if (sanction && !sanctionSuppressed) {
+        this.#startAutomodSanctionCooldown(input.userId, sanction);
       }
     } catch (error) {
       if (item) {
@@ -591,13 +620,15 @@ export class ModerationModule
         payload: {
           action: input.action,
           activePoints,
-          appliedAction: decision.action,
+          appliedAction: effectiveDecision.action,
           deleteMessage: input.deleteMessage,
           points: input.points,
+          sanctionSuppressed,
           signals: input.signals,
         },
         severity:
-          decision.action === "ban" || decision.action === "kick"
+          effectiveDecision.action === "ban" ||
+          effectiveDecision.action === "kick"
             ? "warning"
             : "info",
         subject: { id: input.userId, kind: "user" },
@@ -616,7 +647,42 @@ export class ModerationModule
       activePoints,
       appliedAction,
       caseNumber: item?.number ?? null,
+      sanctionSuppressed,
     };
+  }
+
+  #automodSanctionCooldownKey(
+    userId: string,
+    sanction: AutomodSanction,
+  ): string {
+    return `${userId}:${sanction}`;
+  }
+
+  #isAutomodSanctionCoolingDown(
+    userId: string,
+    sanction: AutomodSanction,
+  ): boolean {
+    const key = this.#automodSanctionCooldownKey(userId, sanction);
+    const expiresAt = this.#automodSanctionCooldowns.get(key);
+    if (expiresAt === undefined) return false;
+    if (expiresAt > Date.now()) return true;
+    this.#automodSanctionCooldowns.delete(key);
+    return false;
+  }
+
+  #startAutomodSanctionCooldown(
+    userId: string,
+    sanction: AutomodSanction,
+  ): void {
+    const key = this.#automodSanctionCooldownKey(userId, sanction);
+    const expiresAt = Date.now() + AUTOMOD_SANCTION_COOLDOWN_MS;
+    this.#automodSanctionCooldowns.set(key, expiresAt);
+    const cleanup = setTimeout(() => {
+      if (this.#automodSanctionCooldowns.get(key) === expiresAt) {
+        this.#automodSanctionCooldowns.delete(key);
+      }
+    }, AUTOMOD_SANCTION_COOLDOWN_MS);
+    cleanup.unref();
   }
 
   async checkAppeal(number: number, userId: string) {

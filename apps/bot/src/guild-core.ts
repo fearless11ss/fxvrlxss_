@@ -46,6 +46,7 @@ import {
   type GuildResourceCatalogWriter,
 } from "./guild-resource-catalog.js";
 import type { MessageArchiveReader } from "./message-archive.js";
+import { describeMemberTimeoutChange } from "./member-timeout-log.js";
 import { ModerationModule } from "./moderation-module.js";
 import type { ModerationAppealHandler } from "./moderation-appeals.js";
 import type { ModerationSystemPublicationRepository } from "./moderation-system-publication.js";
@@ -489,6 +490,12 @@ export async function startGuildCore(
     ) {
       return;
     }
+    const timeoutChange = timeoutChanged
+      ? describeMemberTimeoutChange(
+          before.communicationDisabledUntilTimestamp,
+          after.communicationDisabledUntilTimestamp,
+        )
+      : null;
 
     await audit.publish({
       category: timeoutChanged ? "moderation" : "server",
@@ -511,11 +518,11 @@ export async function startGuildCore(
           ? `Сняты роли: ${removedRoles.join(", ")}.`
           : "",
         nicknameChanged ? "Изменён никнейм." : "",
-        timeoutChanged ? "Изменён тайм-аут." : "",
+        timeoutChange?.summary ?? "",
       ]
         .filter(Boolean)
         .join(" "),
-      title: timeoutChanged ? "Изменён тайм-аут" : "Изменён участник",
+      title: timeoutChange?.title ?? "Изменён участник",
     });
   });
 
@@ -527,6 +534,7 @@ export async function startGuildCore(
     if (message.author.bot || isAutomodExempt(message, automodRuntime)) return;
     const decision = automodRuntime.inspect(toModerationMessage(message));
     if (decision.findings.length === 0) return;
+    let sanctionSuppressed = false;
     const publishSignal = () =>
       audit.publish({
         actor: { id: message.author.id, kind: "user" },
@@ -538,6 +546,7 @@ export async function startGuildCore(
           action: decision.action,
           findings: decision.findings,
           messageId: message.id,
+          sanctionSuppressed,
         },
         severity: "warning",
         subject: {
@@ -545,11 +554,18 @@ export async function startGuildCore(
           id: message.id,
           kind: "message",
         },
-        summary: buildAutomodLogSummary(
-          automodRuntime.config,
-          decision,
-          message.channelId,
-        ),
+        summary: [
+          buildAutomodLogSummary(
+            automodRuntime.config,
+            decision,
+            message.channelId,
+          ),
+          sanctionSuppressed
+            ? "Повторное наказание не применено: действует защита от дублей."
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
         title: "Сработала автомодерация",
       });
     if (
@@ -562,7 +578,7 @@ export async function startGuildCore(
     }
     try {
       if (moderationModule) {
-        await moderationModule.applyAutomodViolation({
+        const result = await moderationModule.applyAutomodViolation({
           action:
             automodRuntime.config.mode === "points"
               ? "points"
@@ -583,6 +599,7 @@ export async function startGuildCore(
           timeoutMinutes: decision.timeoutMinutes,
           userId: message.author.id,
         });
+        sanctionSuppressed = result.sanctionSuppressed;
       } else if (
         decision.deleteMessage ||
         (decision.action !== "observe" && decision.action !== "points")
