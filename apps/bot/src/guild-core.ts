@@ -24,6 +24,7 @@ import {
 import type { AutomodPublicationRepository } from "./automod-publication.js";
 import { AutomodPublicationWorker } from "./automod-publication.js";
 import { AutomodRuntime } from "./automod-runtime.js";
+import { AutomodSignalLogGate } from "./automod-signal-log-gate.js";
 import {
   describeChannelUpdate,
   type ChannelUpdateSnapshot,
@@ -315,6 +316,7 @@ export async function startGuildCore(
   };
   await refreshGuildResourceCatalog();
   const automodRuntime = new AutomodRuntime();
+  const automodSignalLogGate = new AutomodSignalLogGate(15_000);
   const discordAutomod = new DiscordAutomodAdapter(
     guild,
     resources,
@@ -535,8 +537,19 @@ export async function startGuildCore(
     const decision = automodRuntime.inspect(toModerationMessage(message));
     if (decision.findings.length === 0) return;
     let sanctionSuppressed = false;
-    const publishSignal = () =>
-      audit.publish({
+    const publishSignal = () => {
+      const signals = decision.findings.map(({ signal }) => signal);
+      if (
+        !automodSignalLogGate.shouldPublish({
+          action: decision.action,
+          channelId: message.channelId,
+          signals,
+          userId: message.author.id,
+        })
+      ) {
+        return Promise.resolve();
+      }
+      return audit.publish({
         actor: { id: message.author.id, kind: "user" },
         category: "security",
         discord: true,
@@ -568,6 +581,7 @@ export async function startGuildCore(
           .join("\n"),
         title: "Сработала автомодерация",
       });
+    };
     if (
       decision.action === "observe" &&
       decision.points === 0 &&
