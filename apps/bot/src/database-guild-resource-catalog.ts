@@ -1,6 +1,6 @@
 import type { Database } from "@fxvrlxss/database/client";
 import { discordResourceCatalog } from "@fxvrlxss/database/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import type {
   GuildResourceCatalogEntry,
@@ -35,5 +35,51 @@ export class DatabaseGuildResourceCatalogWriter implements GuildResourceCatalogW
         })),
       );
     });
+  }
+
+  async remove(
+    guildId: string,
+    kind: GuildResourceCatalogEntry["kind"],
+    resourceId: string,
+  ): Promise<void> {
+    await this.#database
+      .delete(discordResourceCatalog)
+      .where(
+        and(
+          eq(discordResourceCatalog.guildId, guildId),
+          eq(discordResourceCatalog.kind, kind),
+          eq(discordResourceCatalog.resourceId, resourceId),
+        ),
+      );
+  }
+
+  async upsert(
+    guildId: string,
+    entry: GuildResourceCatalogEntry,
+  ): Promise<void> {
+    await this.#database
+      .insert(discordResourceCatalog)
+      .values({
+        guildId,
+        kind: entry.kind,
+        name: entry.name,
+        parentName: entry.parentName,
+        position: entry.position,
+        resourceId: entry.id,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        set: {
+          name: entry.name,
+          parentName: entry.parentName,
+          position: entry.position,
+          updatedAt: new Date(),
+        },
+        target: [
+          discordResourceCatalog.guildId,
+          discordResourceCatalog.kind,
+          discordResourceCatalog.resourceId,
+        ],
+      });
   }
 }

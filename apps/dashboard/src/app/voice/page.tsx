@@ -14,7 +14,7 @@ const navigation = [
   ["Тикеты", "/tickets"],
   ["Голосовые", "/voice"],
   ["Правила и навигация", "#rules"],
-  ["Логи", "#logs"],
+  ["Логи", "/logs"],
   ["Участники", "#members"],
   ["Настройки", "#settings"],
 ] as const;

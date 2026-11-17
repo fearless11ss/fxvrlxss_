@@ -9,7 +9,7 @@ const navigation = [
   ["Тикеты", "/tickets"],
   ["Голосовые", "/voice"],
   ["Правила и навигация", "rules"],
-  ["Логи", "logs"],
+  ["Логи", "/logs"],
   ["Участники", "members"],
   ["Настройки", "settings"],
 ] as const;
@@ -179,9 +179,9 @@ export default async function DashboardPage() {
                 <p className="sectionPath">Последние события</p>
                 <h2 id="events-title">Журнал</h2>
               </div>
-              <button className="textButton" type="button">
+              <Link className="textButton" href="/logs">
                 Все логи
-              </button>
+              </Link>
             </div>
 
             <ol className="eventList">

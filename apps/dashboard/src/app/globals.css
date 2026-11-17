@@ -1603,3 +1603,510 @@ textarea:focus-visible {
     border-right: 0;
   }
 }
+
+.logsShell {
+  grid-template-columns: 252px minmax(0, 1fr);
+}
+
+.logsWorkspace {
+  padding-inline: clamp(28px, 4vw, 64px);
+}
+
+.logsIntro {
+  max-width: 900px;
+  padding-bottom: 48px;
+}
+
+.logsIntro h1 {
+  max-width: 760px;
+}
+
+.logsMetrics {
+  grid-template-columns: 1.35fr 1fr 1.15fr;
+}
+
+.logsBody {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 310px;
+  align-items: start;
+  gap: clamp(32px, 4vw, 58px);
+  padding-top: 60px;
+}
+
+.logLedger {
+  min-width: 0;
+}
+
+.logLedgerHeader > span {
+  padding-bottom: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.logEvents {
+  border-bottom: 1px solid var(--steel);
+}
+
+.logEvent {
+  display: grid;
+  grid-template-columns: 136px minmax(0, 1fr);
+  border-bottom: 1px solid var(--steel);
+}
+
+.logEvent:last-child {
+  border-bottom: 0;
+}
+
+.logMoment {
+  display: grid;
+  position: relative;
+  grid-template-columns: minmax(0, 1fr) 15px;
+  align-content: start;
+  gap: 14px;
+  padding: 28px 0;
+  border-right: 1px solid var(--steel);
+}
+
+.logMoment time strong,
+.logMoment time span {
+  display: block;
+}
+
+.logMoment time strong {
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.logMoment time span {
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.logTimelineMark {
+  width: 9px;
+  height: 9px;
+  margin-top: 4px;
+  border: 1px solid var(--ash);
+  background: var(--void);
+  transform: translateX(5px) rotate(45deg);
+}
+
+.logSeverity-warning .logTimelineMark {
+  border-color: #bd8c63;
+}
+
+.logSeverity-critical .logTimelineMark {
+  border-color: var(--wound-bright);
+  background: var(--wound);
+}
+
+.logEventBody {
+  min-width: 0;
+  padding: 28px 0 30px 32px;
+}
+
+.logEventMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px 14px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.logEventMeta span {
+  padding-left: 11px;
+  border-left: 1px solid var(--steel-light);
+}
+
+.logEventMeta span:first-child {
+  padding-left: 0;
+  border-left: 0;
+  color: var(--ash);
+}
+
+.logEventMeta code {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logEventBody h3 {
+  margin: 15px 0 0;
+  font-family: var(--display);
+  font-size: clamp(24px, 2.2vw, 31px);
+  font-weight: 500;
+  line-height: 1.05;
+}
+
+.logEventBody > p {
+  max-width: 760px;
+  margin: 13px 0 0;
+  color: #c7c7c3;
+  font-size: 12px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.logEntities {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 22px;
+  border: 1px solid var(--steel);
+  background: var(--steel);
+}
+
+.logEntities > div {
+  min-width: 0;
+  padding: 13px 15px;
+  background: var(--void);
+}
+
+.logEntities > div > span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.logEntity {
+  display: block;
+  min-width: 0;
+  color: var(--bone);
+  text-decoration: none;
+}
+
+.logEntity:hover strong {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.logEntity strong,
+.logEntity span,
+.logEntity small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logEntity strong {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.logEntity span,
+.logEntity small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.logTechnical {
+  margin-top: 20px;
+  border-top: 1px solid var(--steel);
+}
+
+.logTechnical summary {
+  padding: 13px 0 0;
+  color: var(--ash);
+  cursor: pointer;
+  font-size: 10px;
+  list-style-position: inside;
+}
+
+.logTechnical pre {
+  max-height: 360px;
+  margin: 13px 0 0;
+  padding: 16px;
+  border: 1px solid var(--steel);
+  background: #080808;
+  color: #b8b8b4;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 10px;
+  line-height: 1.6;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.logControlRail {
+  position: sticky;
+  top: 26px;
+}
+
+.logFilters,
+.logCategoryRegister {
+  border: 1px solid var(--steel);
+  background: rgba(8, 8, 8, 0.88);
+}
+
+.logFilters {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+}
+
+.logFilterHeading {
+  padding-bottom: 19px;
+  border-bottom: 1px solid var(--steel);
+}
+
+.logFilterHeading h2,
+.logCategoryRegister h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.logFilterHeading > p:last-child {
+  margin: 11px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.logFilters label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  color: var(--ash);
+  font-size: 10px;
+}
+
+.logFilters input,
+.logFilters select {
+  width: 100%;
+  min-width: 0;
+  min-height: 43px;
+  padding: 9px 11px;
+  font-size: 11px;
+}
+
+.logDateRange {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 11px;
+}
+
+.logApplyButton {
+  min-height: 44px;
+  border: 1px solid var(--bone);
+  background: var(--bone);
+  color: var(--void);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.logResetLink {
+  justify-self: center;
+  color: var(--ash);
+  font-size: 10px;
+  text-underline-offset: 3px;
+}
+
+.logCategoryRegister {
+  margin-top: 18px;
+  padding: 24px;
+}
+
+.logCategoryRegister dl {
+  margin: 18px 0 0;
+}
+
+.logCategoryRegister dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--steel);
+  font-size: 10px;
+}
+
+.logCategoryRegister dt {
+  color: var(--ash);
+}
+
+.logCategoryRegister dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.logPagination {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 24px;
+  padding: 24px 0;
+  border-bottom: 1px solid var(--steel);
+  font-size: 10px;
+}
+
+.logPagination a,
+.logPagination span {
+  color: var(--ash);
+}
+
+.logPagination a:last-child,
+.logPagination span:last-child {
+  text-align: right;
+}
+
+.logPagination a {
+  text-underline-offset: 3px;
+}
+
+.logPagination span {
+  opacity: 0.4;
+}
+
+.logPagination strong {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.logEmpty {
+  padding: 58px 0;
+  border-bottom: 1px solid var(--steel);
+}
+
+.logEmpty strong {
+  font-family: var(--display);
+  font-size: 29px;
+  font-weight: 500;
+}
+
+.logEmpty p {
+  margin: 12px 0 0;
+  color: var(--muted);
+}
+
+.logEmpty a {
+  display: inline-block;
+  margin-top: 18px;
+  color: var(--bone);
+  font-size: 11px;
+}
+
+.logLoadingSidebar,
+.logLoadingLine,
+.logLoadingTitle,
+.logLoadingMetrics,
+.logLoadingLedger {
+  background: #10100f;
+}
+
+.logLoadingLine {
+  width: 100%;
+  height: 72px;
+  border-bottom: 1px solid var(--steel);
+}
+
+.logLoadingTitle {
+  width: min(620px, 80%);
+  height: 96px;
+  margin-top: 76px;
+}
+
+.logLoadingMetrics {
+  height: 154px;
+  margin-top: 58px;
+}
+
+.logLoadingLedger {
+  height: 540px;
+  margin-top: 60px;
+}
+
+@media (max-width: 1180px) {
+  .logsBody {
+    grid-template-columns: 1fr;
+  }
+
+  .logControlRail {
+    position: static;
+    order: -1;
+  }
+
+  .logFilters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .logFilterHeading,
+  .logApplyButton,
+  .logResetLink {
+    grid-column: 1 / -1;
+  }
+
+  .logCategoryRegister {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .logsMetrics {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .logsMetrics .metric:nth-child(3) {
+    grid-column: 1 / -1;
+    border-left: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .logsMetrics,
+  .logFilters,
+  .logEntities {
+    grid-template-columns: 1fr;
+  }
+
+  .logsMetrics .metric:nth-child(3),
+  .logFilterHeading,
+  .logApplyButton,
+  .logResetLink {
+    grid-column: auto;
+  }
+
+  .logsBody {
+    padding-top: 42px;
+  }
+
+  .logEvent {
+    grid-template-columns: 1fr;
+  }
+
+  .logMoment {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 23px 0 12px;
+    border-right: 0;
+  }
+
+  .logTimelineMark {
+    transform: rotate(45deg);
+  }
+
+  .logEventBody {
+    padding: 0 0 28px;
+  }
+
+  .logLedgerHeader {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+}

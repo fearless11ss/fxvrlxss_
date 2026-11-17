@@ -37,6 +37,7 @@ updated: 2026-11-15
 - [x] Searchable role and channel selectors backed by a bot-synchronized catalog
 - [x] Moderation sanctions, points, evidence, and appeals
 - [x] Split Discord log routing and full database event journal foundation
+- [x] Searchable read-only audit journal in the owner dashboard
 - [x] Versioned ticket panel, private channels, staff workflow, and transcripts
 - [x] Temporary voice-room lifecycle, owner controls, persistent access lists, recovery, and dashboard configuration
 - [x] Additive staging guild blueprint reconciliation and dry-run

@@ -46,7 +46,11 @@ import {
   type GuildResources,
 } from "./guild-resources.js";
 import {
+  channelCatalogEntry,
   collectGuildResourceCatalog,
+  memberCatalogEntry,
+  roleCatalogEntry,
+  type GuildResourceCatalogEntry,
   type GuildResourceCatalogWriter,
 } from "./guild-resource-catalog.js";
 import type { MessageArchiveReader } from "./message-archive.js";
@@ -378,6 +382,36 @@ export async function startGuildCore(
     );
   };
   await refreshGuildResourceCatalog();
+  const removeGuildResource = async (
+    kind: GuildResourceCatalogEntry["kind"],
+    resourceId: string,
+  ) => {
+    try {
+      await options.guildResourceCatalogWriter?.remove(
+        guildId,
+        kind,
+        resourceId,
+      );
+    } catch (error) {
+      logger.warn(
+        { error, kind, resourceId },
+        "guild resource catalog removal failed",
+      );
+    }
+  };
+  const upsertGuildResource = async (
+    entry: GuildResourceCatalogEntry | null,
+  ) => {
+    if (!entry) return;
+    try {
+      await options.guildResourceCatalogWriter?.upsert(guildId, entry);
+    } catch (error) {
+      logger.warn(
+        { error, kind: entry.kind, resourceId: entry.id },
+        "guild resource catalog upsert failed",
+      );
+    }
+  };
   const automodRuntime = new AutomodRuntime();
   const automodSignalLogGate = new AutomodSignalLogGate(15_000);
   const discordAutomod = new DiscordAutomodAdapter(
@@ -482,7 +516,9 @@ export async function startGuildCore(
   await voicePublicationWorker?.start();
 
   safeOn(Events.GuildMemberAdd, async (member) => {
-    if (member.guild.id !== guildId || member.user.bot) return;
+    if (member.guild.id !== guildId) return;
+    await upsertGuildResource(memberCatalogEntry(member));
+    if (member.user.bot) return;
     try {
       if (!member.roles.cache.has(resources.roles.member)) {
         await member.roles.add(
@@ -519,7 +555,9 @@ export async function startGuildCore(
   });
 
   safeOn(Events.GuildMemberRemove, async (member) => {
-    if (member.guild.id !== guildId || member.user.bot) return;
+    if (member.guild.id !== guildId) return;
+    await removeGuildResource("member", member.id);
+    if (member.user.bot) return;
     try {
       await sendLifecycleMessage(client, resources, "left", member.id);
     } catch (error) {
@@ -537,6 +575,7 @@ export async function startGuildCore(
 
   safeOn(Events.GuildMemberUpdate, async (before, after) => {
     if (after.guild.id !== guildId) return;
+    await upsertGuildResource(memberCatalogEntry(after));
     const addedRoles = after.roles.cache
       .filter((role) => !before.roles.cache.has(role.id))
       .map(({ id, name }) => ({ id, name }));
@@ -999,7 +1038,7 @@ export async function startGuildCore(
         resources.channels.support.openTicket,
       );
       const temporaryVoice = isTemporaryVoiceChannel(channel, resources);
-      await refreshGuildResourceCatalog();
+      await upsertGuildResource(channelCatalogEntry(channel));
       await audit.publish({
         category: "server",
         discord: shouldLogChannelEventInDiscord({
@@ -1033,7 +1072,7 @@ export async function startGuildCore(
         channel.type === ChannelType.GuildVoice
           ? await voiceModule?.handleChannelDelete(channel)
           : false;
-      await refreshGuildResourceCatalog();
+      await removeGuildResource("channel", channel.id);
       await audit.publish({
         category: "server",
         discord: shouldLogChannelEventInDiscord({
@@ -1088,7 +1127,7 @@ export async function startGuildCore(
       resources.channels.support.openTicket,
     );
     const temporaryVoice = isTemporaryVoiceChannel(after, resources);
-    await refreshGuildResourceCatalog();
+    await upsertGuildResource(channelCatalogEntry(after));
     await audit.publish({
       category: "server",
       discord: shouldLogChannelEventInDiscord({
@@ -1109,7 +1148,7 @@ export async function startGuildCore(
 
   safeOn(Events.GuildRoleCreate, async (role) => {
     if (role.guild.id !== guildId) return;
-    await refreshGuildResourceCatalog();
+    await upsertGuildResource(roleCatalogEntry(role));
     await audit.publish({
       category: "server",
       discord: true,
@@ -1123,7 +1162,7 @@ export async function startGuildCore(
 
   safeOn(Events.GuildRoleDelete, async (role) => {
     if (role.guild.id !== guildId) return;
-    await refreshGuildResourceCatalog();
+    await removeGuildResource("role", role.id);
     await audit.publish({
       category: "server",
       discord: true,
@@ -1137,7 +1176,7 @@ export async function startGuildCore(
 
   safeOn(Events.GuildRoleUpdate, async (before, after) => {
     if (after.guild.id !== guildId) return;
-    await refreshGuildResourceCatalog();
+    await upsertGuildResource(roleCatalogEntry(after));
     await audit.publish({
       category: "server",
       discord: true,

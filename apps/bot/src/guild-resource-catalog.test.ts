@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { collectGuildResourceCatalog } from "./guild-resource-catalog.js";
 
 describe("guild resource catalog", () => {
-  it("collects message channels and roles without everyone or threads", () => {
+  it("collects message channels, roles, and members", () => {
     const guild = {
       channels: {
         cache: new Collection([
@@ -33,10 +33,39 @@ describe("guild resource catalog", () => {
         ]),
       },
       id: "guild",
+      members: {
+        cache: new Collection([
+          [
+            "member-1",
+            {
+              displayName: "Редактор",
+              id: "member-1",
+              roles: { highest: { position: 3 } },
+              user: { username: "editor" },
+            },
+          ],
+        ]),
+      },
       roles: {
         cache: new Collection([
-          ["guild", { id: "guild", name: "@everyone", position: 0 }],
-          ["moderator", { id: "moderator", name: "Модератор", position: 4 }],
+          [
+            "guild",
+            {
+              guild: { id: "guild" },
+              id: "guild",
+              name: "@everyone",
+              position: 0,
+            },
+          ],
+          [
+            "moderator",
+            {
+              guild: { id: "guild" },
+              id: "moderator",
+              name: "Модератор",
+              position: 4,
+            },
+          ],
         ]),
       },
     };
@@ -54,6 +83,13 @@ describe("guild resource catalog", () => {
         kind: "role",
         name: "Модератор",
         position: 4,
+      },
+      {
+        id: "member-1",
+        kind: "member",
+        name: "Редактор",
+        parentName: "editor",
+        position: 3,
       },
     ]);
   });
