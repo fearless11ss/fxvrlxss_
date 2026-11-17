@@ -4,7 +4,7 @@ tags:
   - fxvrlxss
   - status
 status: active
-updated: 2026-11-15
+updated: 2026-11-17
 ---
 
 # Implementation status
@@ -38,6 +38,7 @@ updated: 2026-11-15
 - [x] Moderation sanctions, points, evidence, and appeals
 - [x] Split Discord log routing and full database event journal foundation
 - [x] Searchable read-only audit journal in the owner dashboard
+- [x] Read-only member cards with role snapshots, search, filters, and unified case, ticket, and lifecycle history
 - [x] Versioned ticket panel, private channels, staff workflow, and transcripts
 - [x] Temporary voice-room lifecycle, owner controls, persistent access lists, recovery, and dashboard configuration
 - [x] Additive staging guild blueprint reconciliation and dry-run

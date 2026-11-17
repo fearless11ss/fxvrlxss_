@@ -10,7 +10,7 @@ const navigation = [
   ["Голосовые", "/voice"],
   ["Правила и навигация", "rules"],
   ["Логи", "/logs"],
-  ["Участники", "members"],
+  ["Участники", "/members"],
   ["Настройки", "settings"],
 ] as const;
 

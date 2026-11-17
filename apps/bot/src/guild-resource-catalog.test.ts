@@ -39,8 +39,18 @@ describe("guild resource catalog", () => {
             "member-1",
             {
               displayName: "Редактор",
+              guild: { id: "guild" },
               id: "member-1",
-              roles: { highest: { position: 3 } },
+              roles: {
+                cache: new Collection([
+                  ["guild", { id: "guild", name: "@everyone", position: 0 }],
+                  [
+                    "moderator",
+                    { id: "moderator", name: "Модератор", position: 4 },
+                  ],
+                ]),
+                highest: { position: 4 },
+              },
               user: { username: "editor" },
             },
           ],
@@ -89,7 +99,8 @@ describe("guild resource catalog", () => {
         kind: "member",
         name: "Редактор",
         parentName: "editor",
-        position: 3,
+        position: 4,
+        roleIds: ["moderator"],
       },
     ]);
   });

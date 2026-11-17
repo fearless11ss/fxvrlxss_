@@ -31,6 +31,7 @@ export class DatabaseGuildResourceCatalogWriter implements GuildResourceCatalogW
           parentName: entry.parentName,
           position: entry.position,
           resourceId: entry.id,
+          roleIds: [...(entry.roleIds ?? [])],
           updatedAt: new Date(),
         })),
       );
@@ -66,6 +67,7 @@ export class DatabaseGuildResourceCatalogWriter implements GuildResourceCatalogW
         parentName: entry.parentName,
         position: entry.position,
         resourceId: entry.id,
+        roleIds: [...(entry.roleIds ?? [])],
         updatedAt: new Date(),
       })
       .onConflictDoUpdate({
@@ -73,6 +75,7 @@ export class DatabaseGuildResourceCatalogWriter implements GuildResourceCatalogW
           name: entry.name,
           parentName: entry.parentName,
           position: entry.position,
+          roleIds: [...(entry.roleIds ?? [])],
           updatedAt: new Date(),
         },
         target: [

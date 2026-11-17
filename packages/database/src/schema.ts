@@ -95,6 +95,7 @@ export const discordResourceCatalog = pgTable(
     name: text("name").notNull(),
     parentName: text("parent_name"),
     position: integer("position").default(0).notNull(),
+    roleIds: jsonb("role_ids").$type<string[]>().default([]).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

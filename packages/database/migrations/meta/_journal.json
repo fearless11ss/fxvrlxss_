@@ -71,6 +71,13 @@
       "when": 1794794400000,
       "tag": "0009_moderation_source_events",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794895200000,
+      "tag": "0010_member_role_snapshots",
+      "breakpoints": true
     }
   ]
 }

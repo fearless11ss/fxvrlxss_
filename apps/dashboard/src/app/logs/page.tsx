@@ -23,7 +23,7 @@ const navigation = [
   ["Голосовые", "/voice"],
   ["Правила и навигация", "#rules"],
   ["Логи", "/logs"],
-  ["Участники", "#members"],
+  ["Участники", "/members"],
   ["Настройки", "#settings"],
 ] as const;
 
@@ -87,6 +87,13 @@ function Resource({
       >
         {content}
       </a>
+    );
+  }
+  if (resource.kind === "member" || resource.kind === "user") {
+    return (
+      <Link className="logEntity" href={`/members?member=${resource.id}`}>
+        {content}
+      </Link>
     );
   }
   if (resource.kind === "message" && resource.channelId) {

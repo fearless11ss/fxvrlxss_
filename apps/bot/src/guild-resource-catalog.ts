@@ -6,6 +6,7 @@ export interface GuildResourceCatalogEntry {
   readonly name: string;
   readonly parentName?: string;
   readonly position: number;
+  readonly roleIds?: readonly string[];
 }
 
 export interface GuildResourceCatalogWriter {
@@ -45,6 +46,10 @@ export function memberCatalogEntry(
       ? { parentName: member.user.username }
       : {}),
     position: member.roles.highest.position,
+    roleIds: member.roles.cache
+      .filter((role) => role.id !== member.guild.id)
+      .sort((left, right) => right.position - left.position)
+      .map((role) => role.id),
   };
 }
 
