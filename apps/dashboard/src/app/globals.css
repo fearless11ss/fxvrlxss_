@@ -1659,11 +1659,8 @@ textarea:focus-visible {
 }
 
 .logMoment {
-  display: grid;
+  display: block;
   position: relative;
-  grid-template-columns: minmax(0, 1fr) 15px;
-  align-content: start;
-  gap: 14px;
   padding: 28px 0;
   border-right: 1px solid var(--steel);
 }
@@ -1689,12 +1686,14 @@ textarea:focus-visible {
 }
 
 .logTimelineMark {
+  position: absolute;
+  top: 32px;
+  right: -4px;
   width: 9px;
   height: 9px;
-  margin-top: 4px;
   border: 1px solid var(--ash);
   background: var(--void);
-  transform: translateX(5px) rotate(45deg);
+  transform: rotate(45deg);
 }
 
 .logSeverity-warning .logTimelineMark {
@@ -1771,6 +1770,10 @@ textarea:focus-visible {
   min-width: 0;
   padding: 13px 15px;
   background: var(--void);
+}
+
+.logEntities > div:only-child {
+  grid-column: 1 / -1;
 }
 
 .logEntities > div > span {
@@ -2097,6 +2100,8 @@ textarea:focus-visible {
   }
 
   .logTimelineMark {
+    position: static;
+    margin-top: 0;
     transform: rotate(45deg);
   }
 
