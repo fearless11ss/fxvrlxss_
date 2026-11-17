@@ -426,11 +426,8 @@ export class ModerationModule
   async applyAutomodViolation(
     input: AutomodViolationInput,
   ): Promise<AutomodViolationResult> {
-    if (input.message && input.deleteMessage) {
-      if (!input.message.deletable) {
-        throw new Error("Сообщение нельзя удалить");
-      }
-      await input.message.delete();
+    if (this.#shouldDeleteBeforeAutomodQueue(input)) {
+      await this.#deleteAutomodMessage(input);
     }
     const previous = this.#automodQueues.get(input.userId) ?? Promise.resolve();
     const operation = previous.then(
@@ -490,6 +487,11 @@ export class ModerationModule
     const sanctionSuppressed = sanction
       ? this.#isAutomodSanctionCoolingDown(input.userId, sanction)
       : false;
+    const deleteAfterSanction =
+      input.deleteMessage && !this.#shouldDeleteBeforeAutomodQueue(input);
+    if (deleteAfterSanction && (sanction === null || sanctionSuppressed)) {
+      await this.#deleteAutomodMessage(input);
+    }
     if (sanctionSuppressed && input.points === 0) {
       return {
         activePoints,
@@ -551,23 +553,26 @@ export class ModerationModule
         ? "удаление сообщения"
         : `${primaryAction} + удаление сообщения`
       : primaryAction;
-    if (item) {
-      await this.#notifyMember({
-        action:
-          effectiveDecision.action !== "warn"
-            ? effectiveDecision.action
-            : input.action === "points" || input.action === "quarantine"
-              ? input.action
-              : "warn",
-        caseNumber: item.number,
-        channelId: input.channelId,
-        points: input.points,
-        summary: input.summary,
-        timeoutMinutes: effectiveDecision.timeoutMinutes,
-        userId: input.userId,
-      });
-    }
-
+    const notifyMember = () =>
+      item
+        ? this.#notifyMember({
+            action:
+              effectiveDecision.action !== "warn"
+                ? effectiveDecision.action
+                : input.action === "points" || input.action === "quarantine"
+                  ? input.action
+                  : "warn",
+            caseNumber: item.number,
+            channelId: input.channelId,
+            points: input.points,
+            summary: input.summary,
+            timeoutMinutes: effectiveDecision.timeoutMinutes,
+            userId: input.userId,
+          })
+        : Promise.resolve();
+    const notifyBeforeSanction =
+      effectiveDecision.action === "kick" || effectiveDecision.action === "ban";
+    if (item && notifyBeforeSanction) await notifyMember();
     try {
       const target =
         input.action === "quarantine" || effectiveDecision.action !== "warn"
@@ -611,6 +616,12 @@ export class ModerationModule
       throw error;
     }
 
+    if (deleteAfterSanction && sanction !== null && !sanctionSuppressed) {
+      await this.#deleteAutomodMessage(input);
+    }
+
+    if (item && !notifyBeforeSanction) await notifyMember();
+
     if (item) {
       await this.#audit.publish({
         actor: { id: this.#guild.client.user.id, kind: "user" },
@@ -649,6 +660,22 @@ export class ModerationModule
       caseNumber: item?.number ?? null,
       sanctionSuppressed,
     };
+  }
+
+  async #deleteAutomodMessage(input: AutomodViolationInput): Promise<void> {
+    if (!input.message || !input.deleteMessage) return;
+    if (!input.message.deletable) {
+      throw new Error("Сообщение нельзя удалить");
+    }
+    await input.message.delete();
+  }
+
+  #shouldDeleteBeforeAutomodQueue(input: AutomodViolationInput): boolean {
+    return (
+      input.deleteMessage &&
+      (input.action === "observe" ||
+        (input.action === "points" && !input.applyThresholds))
+    );
   }
 
   #automodSanctionCooldownKey(

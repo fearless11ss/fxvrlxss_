@@ -35,6 +35,72 @@ const item: ModerationCaseRecord = {
 };
 
 describe("manual moderation Components V2", () => {
+  it("applies an automod sanction before deleting the violating message", async () => {
+    const order: string[] = [];
+    const moderation = new ModerationModule({
+      audit: { publish: vi.fn(() => Promise.resolve()) } as never,
+      guild: {
+        channels: { fetch: vi.fn() },
+        client: {
+          user: { id: "bot-1" },
+          users: {
+            fetch: vi.fn(() =>
+              Promise.resolve({ send: vi.fn(() => Promise.resolve()) }),
+            ),
+          },
+        },
+        id: "guild-1",
+        members: {
+          fetch: vi.fn(() =>
+            Promise.resolve({
+              moderatable: true,
+              timeout: vi.fn(() => {
+                order.push("timeout");
+                return Promise.resolve();
+              }),
+            }),
+          ),
+        },
+        name: "test",
+        roles: { cache: new Collection() },
+      } as never,
+      logger: {} as never,
+      quarantineRoleId: "quarantine-1",
+      repository: {
+        activePoints: vi.fn(() => Promise.resolve(0)),
+        create: vi.fn(() => Promise.resolve({ created: true, record: item })),
+      } as never,
+      ticketChannelId: "tickets-1",
+    });
+
+    await Promise.all(
+      [1, 2, 3].map((index) =>
+        moderation.applyAutomodViolation({
+          action: "timeout",
+          applyThresholds: false,
+          channelId: "channel-1",
+          deleteMessage: true,
+          message: {
+            deletable: true,
+            delete: vi.fn(() => {
+              order.push(`delete-${index}`);
+              return Promise.resolve();
+            }),
+          } as never,
+          messageId: `message-${index}`,
+          points: 0,
+          signals: ["repeated-message"],
+          sourceEventKey: `timeout-order-${index}`,
+          summary: "повторы",
+          timeoutMinutes: 120,
+          userId: "user-1",
+        }),
+      ),
+    );
+
+    expect(order).toEqual(["timeout", "delete-1", "delete-2", "delete-3"]);
+  });
+
   it("coalesces repeated automod sanctions without throttling point cases", async () => {
     const applyTimeout = vi.fn(() => Promise.resolve());
     const create = vi.fn(
