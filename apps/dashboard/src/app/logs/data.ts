@@ -19,6 +19,7 @@ import {
 import { getDatabase } from "../../lib/database";
 import { getDashboardEnvironment } from "../../lib/environment";
 import type { LogCategory, LogFilters, LogSeverity } from "./filters";
+import { buildAuditStatsQuery } from "./queries";
 
 const PAGE_SIZE = 25;
 
@@ -178,14 +179,7 @@ export async function getLogsPageData(
   const [filteredRows, statRows, categoryRows, eventTypeRows] =
     await Promise.all([
       database.select({ value: count() }).from(auditEvents).where(where),
-      database
-        .select({
-          attention: sql<number>`count(*) filter (where ${auditEvents.severity} in ('warning', 'critical'))`,
-          lastDay: sql<number>`count(*) filter (where ${auditEvents.occurredAt} >= ${sinceYesterday})`,
-          total: count(),
-        })
-        .from(auditEvents)
-        .where(eq(auditEvents.guildId, guildId)),
+      buildAuditStatsQuery(database, guildId, sinceYesterday),
       database
         .select({ category: auditEvents.category, value: count() })
         .from(auditEvents)
