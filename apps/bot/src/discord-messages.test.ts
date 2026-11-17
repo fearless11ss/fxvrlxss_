@@ -72,6 +72,35 @@ describe("Components V2 messages", () => {
     expect(serialized).not.toContain("`channel-1`");
   });
 
+  it("preserves audit formatting without exposing escape characters", () => {
+    const container = buildAuditComponents({
+      ...auditEvent,
+      eventType: "member.timeout_changed",
+      summary: [
+        "Дело: **#0015** · источник: автомод",
+        "Действие: **Тайм-аут + удаление сообщения**",
+        "Причина: fxvrlxss\\_ moderation by повторы.",
+      ].join("\n"),
+      title: "Тайм-аут выдан",
+    })[0]?.toJSON();
+    const [primary, metadata] = container?.components ?? [];
+
+    expect(primary).toMatchObject({
+      content: [
+        "## Тайм-аут выдан",
+        "Дело: **#0015** · источник: автомод",
+        "Действие: **Тайм-аут + удаление сообщения**",
+        "Причина: fxvrlxss\\_ moderation by повторы.",
+      ].join("\n"),
+      type: ComponentType.TextDisplay,
+    });
+    expect(metadata?.type).toBe(ComponentType.TextDisplay);
+    if (metadata?.type !== ComponentType.TextDisplay) {
+      throw new Error("Audit metadata text display is missing");
+    }
+    expect(metadata.content).toContain("Тип: `member.timeout_changed`");
+  });
+
   it("builds lifecycle containers for joins and leaves", () => {
     const joined = buildLifecycleComponents("joined", "user-1")[0]?.toJSON();
     const left = buildLifecycleComponents("left", "user-1")[0]?.toJSON();

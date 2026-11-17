@@ -46,7 +46,7 @@ function discordEntity(entity: AuditDiscordEntity, guildId: string): string {
 
 export function buildAuditComponents(event: AuditEvent): ContainerBuilder[] {
   const metadata = [
-    `Тип: \`${escapeMarkdown(event.eventType)}\``,
+    `Тип: \`${event.eventType}\``,
     event.actor
       ? `Инициатор: ${discordEntity(event.actor, event.guildId)}`
       : undefined,
@@ -63,7 +63,15 @@ export function buildAuditComponents(event: AuditEvent): ContainerBuilder[] {
       .setAccentColor(accentColor(event))
       .addTextDisplayComponents(
         new TextDisplayBuilder().setContent(
-          `## ${escapeMarkdown(event.title)}\n${truncate(escapeMarkdown(event.summary))}`,
+          `## ${escapeMarkdown(event.title)}\n${truncate(
+            escapeMarkdown(event.summary, {
+              bold: false,
+              escape: false,
+              inlineCode: false,
+              italic: false,
+              underline: false,
+            }),
+          )}`,
         ),
         new TextDisplayBuilder().setContent(`-# ${metadata}`),
       ),
