@@ -12,7 +12,7 @@ import {
   type LogSearchParams,
   type LogSeverity,
 } from "./filters";
-import { plainAuditText, technicalJson } from "./format";
+import { eventTypeLabel, plainAuditText, technicalJson } from "./format";
 
 export const dynamic = "force-dynamic";
 
@@ -63,7 +63,13 @@ function Resource({
   guildId,
   resource,
 }: Readonly<{ guildId: string; resource: LogResource }>) {
-  const label = resource.name ?? resource.id;
+  const fallbackLabels: Readonly<Record<string, string>> = {
+    channel: "Канал",
+    message: "Сообщение",
+    role: "Роль",
+    user: "Пользователь",
+  };
+  const label = resource.name ?? fallbackLabels[resource.kind] ?? "Объект";
   const content = (
     <>
       <strong>{label}</strong>
@@ -218,10 +224,12 @@ export default async function LogsPage({
                       <div className="logEventMeta">
                         <span>{categoryLabels[entry.category]}</span>
                         <span>{severityLabels[entry.severity]}</span>
-                        <code>{entry.eventType}</code>
+                        <span title={entry.eventType}>
+                          {eventTypeLabel(entry.eventType)}
+                        </span>
                       </div>
-                      <h3>{plainAuditText(entry.title)}</h3>
-                      <p>{plainAuditText(entry.summary)}</p>
+                      <h3>{plainAuditText(entry.title, data.resourceNames)}</h3>
+                      <p>{plainAuditText(entry.summary, data.resourceNames)}</p>
                       {entry.actor || entry.subject ? (
                         <div className="logEntities">
                           {entry.actor ? (
@@ -323,11 +331,18 @@ export default async function LogsPage({
                 <span>Тип события</span>
                 <select defaultValue={filters.event} name="event">
                   <option value="">Все события</option>
-                  {data.eventTypes.map((eventType) => (
-                    <option key={eventType} value={eventType}>
-                      {eventType}
-                    </option>
-                  ))}
+                  {[...data.eventTypes]
+                    .sort((left, right) =>
+                      eventTypeLabel(left).localeCompare(
+                        eventTypeLabel(right),
+                        "ru",
+                      ),
+                    )
+                    .map((eventType) => (
+                      <option key={eventType} value={eventType}>
+                        {eventTypeLabel(eventType)}
+                      </option>
+                    ))}
                 </select>
               </label>
               <div className="logDateRange">

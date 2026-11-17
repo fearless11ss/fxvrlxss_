@@ -58,6 +58,7 @@ export interface LogsPageData {
   readonly filteredCount: number;
   readonly page: number;
   readonly pageCount: number;
+  readonly resourceNames: Readonly<Record<string, string>>;
   readonly stats: {
     readonly attention: number;
     readonly lastDay: number;
@@ -110,6 +111,13 @@ function searchTokens(query: string): readonly string[] {
       [query, mentionId].filter((value): value is string => Boolean(value)),
     ),
   ];
+}
+
+function mentionedResourceIds(value: unknown): readonly string[] {
+  if (typeof value !== "string") return [];
+  return [...value.matchAll(/<(?:@!?|@&|#)(\d+)>/gu)].map(
+    (match) => match[1] as string,
+  );
 }
 
 function categoryRecord(): Record<LogCategory, number> {
@@ -203,9 +211,17 @@ export async function getLogsPageData(
     .offset((page - 1) * PAGE_SIZE);
   const referencedIds = [
     ...new Set(
-      rows.flatMap(({ actorId, subjectId }) =>
-        [actorId, subjectId].filter((id): id is string => Boolean(id)),
-      ),
+      rows.flatMap(({ actorId, payload, subjectId }) => {
+        const auditPayload = record(payload) ?? {};
+        const subjectReference = reference(auditPayload.subjectReference);
+        return [
+          actorId,
+          subjectId,
+          subjectReference?.channelId,
+          ...mentionedResourceIds(auditPayload.title),
+          ...mentionedResourceIds(auditPayload.summary),
+        ].filter((id): id is string => Boolean(id));
+      }),
     ),
   ];
   const resources =
@@ -237,6 +253,9 @@ export async function getLogsPageData(
       : undefined;
     const subjectCatalog = row.subjectId
       ? resourcesById.get(row.subjectId)
+      : undefined;
+    const subjectChannelCatalog = subjectReference?.channelId
+      ? resourcesById.get(subjectReference.channelId)
       : undefined;
     const technical = Object.fromEntries(
       Object.entries(payload).filter(
@@ -283,7 +302,9 @@ export async function getLogsPageData(
                   : {}),
               ...(subjectCatalog?.secondaryName
                 ? { secondaryName: subjectCatalog.secondaryName }
-                : {}),
+                : subjectChannelCatalog?.name
+                  ? { secondaryName: `#${subjectChannelCatalog.name}` }
+                  : {}),
             },
           }
         : {}),
@@ -306,6 +327,9 @@ export async function getLogsPageData(
     filteredCount,
     page,
     pageCount,
+    resourceNames: Object.fromEntries(
+      resources.flatMap(({ id, name }) => (name ? [[id, name]] : [])),
+    ),
     stats: {
       attention: Number(stats?.attention ?? 0),
       lastDay: Number(stats?.lastDay ?? 0),
