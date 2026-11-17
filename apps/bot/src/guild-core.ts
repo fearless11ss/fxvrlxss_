@@ -1,4 +1,7 @@
+import { setTimeout as delay } from "node:timers/promises";
+
 import {
+  AuditLogEvent,
   AutoModerationActionType,
   ChannelType,
   Events,
@@ -47,7 +50,11 @@ import {
   type GuildResourceCatalogWriter,
 } from "./guild-resource-catalog.js";
 import type { MessageArchiveReader } from "./message-archive.js";
-import { describeMemberTimeoutChange } from "./member-timeout-log.js";
+import {
+  describeMemberTimeoutChange,
+  findMemberTimeoutAuditContext,
+  type MemberTimeoutAuditContext,
+} from "./member-timeout-log.js";
 import { ModerationModule } from "./moderation-module.js";
 import type { ModerationAppealHandler } from "./moderation-appeals.js";
 import type { ModerationSystemPublicationRepository } from "./moderation-system-publication.js";
@@ -272,6 +279,27 @@ export function shouldLogChannelEventInDiscord(input: {
   return !(input.managedTicket || input.temporaryVoice);
 }
 
+async function fetchMemberTimeoutAuditContext(
+  guild: Guild,
+  userId: string,
+  occurredAt: number,
+): Promise<MemberTimeoutAuditContext | null> {
+  for (const waitMs of [0, 350, 750]) {
+    if (waitMs > 0) await delay(waitMs);
+    const logs = await guild.fetchAuditLogs({
+      limit: 8,
+      type: AuditLogEvent.MemberUpdate,
+    });
+    const context = findMemberTimeoutAuditContext(
+      [...logs.entries.values()],
+      userId,
+      occurredAt,
+    );
+    if (context) return context;
+  }
+  return null;
+}
+
 async function registerStatusCommand(guild: Guild) {
   const command = new SlashCommandBuilder()
     .setName("статус")
@@ -492,14 +520,33 @@ export async function startGuildCore(
     ) {
       return;
     }
+    let timeoutAuditContext: MemberTimeoutAuditContext | null = null;
+    if (timeoutChanged) {
+      try {
+        timeoutAuditContext = await fetchMemberTimeoutAuditContext(
+          after.guild,
+          after.id,
+          Date.now(),
+        );
+      } catch (error) {
+        logger.warn(
+          { error, userId: after.id },
+          "member timeout audit context unavailable",
+        );
+      }
+    }
     const timeoutChange = timeoutChanged
       ? describeMemberTimeoutChange(
           before.communicationDisabledUntilTimestamp,
           after.communicationDisabledUntilTimestamp,
+          timeoutAuditContext,
         )
       : null;
 
     await audit.publish({
+      ...(timeoutAuditContext
+        ? { actor: { id: timeoutAuditContext.actorId, kind: "user" as const } }
+        : {}),
       category: timeoutChanged ? "moderation" : "server",
       discord: true,
       eventType: timeoutChanged ? "member.timeout_changed" : "member.updated",
@@ -509,6 +556,8 @@ export async function startGuildCore(
         nicknameBefore: before.nickname,
         removedRoles,
         timeoutAfter: after.communicationDisabledUntil?.toISOString(),
+        timeoutAuditActorId: timeoutAuditContext?.actorId,
+        timeoutAuditReason: timeoutAuditContext?.reason,
         timeoutBefore: before.communicationDisabledUntil?.toISOString(),
       },
       subject: { id: after.id, kind: "user" },
