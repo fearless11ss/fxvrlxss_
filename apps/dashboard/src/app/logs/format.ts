@@ -38,6 +38,7 @@ const eventTypeLabels: Readonly<Record<string, string>> = {
   "member.left": "Участник вышел",
   "member.onboarding_failed": "Не удалось настроить нового участника",
   "member.timeout_changed": "Тайм-аут участника изменён",
+  "member.timeout_expired": "Тайм-аут участника завершён",
   "member.unbanned": "Участник разбанен",
   "member.updated": "Участник изменён",
   "message.bulk_deleted": "Сообщения удалены массово",

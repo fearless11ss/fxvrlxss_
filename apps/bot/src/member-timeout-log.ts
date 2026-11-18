@@ -111,3 +111,12 @@ export function describeMemberTimeoutChange(
   }
   return { summary: "Тайм-аут не изменился.", title: "Тайм-аут не изменился" };
 }
+
+export function describeNaturalMemberTimeoutExpiry(
+  timeoutUntil: number,
+): MemberTimeoutChangeDescription {
+  return {
+    summary: `Срок тайм-аута истёк ${discordTimestamp(timeoutUntil, "R")}.`,
+    title: "Тайм-аут завершён",
+  };
+}

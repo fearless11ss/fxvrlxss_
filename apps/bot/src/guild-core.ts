@@ -62,9 +62,11 @@ import {
 } from "./member-role-log.js";
 import {
   describeMemberTimeoutChange,
+  describeNaturalMemberTimeoutExpiry,
   findMemberTimeoutAuditContext,
   type MemberTimeoutAuditContext,
 } from "./member-timeout-log.js";
+import { MemberTimeoutExpiryTracker } from "./member-timeout-expiry.js";
 import { ModerationModule } from "./moderation-module.js";
 import type { ModerationAppealHandler } from "./moderation-appeals.js";
 import type { ModerationSystemPublicationRepository } from "./moderation-system-publication.js";
@@ -503,6 +505,28 @@ export async function startGuildCore(
         })
       : undefined;
   const startedAt = new Date();
+  const timeoutExpiryTracker = new MemberTimeoutExpiryTracker({
+    async onExpired({ timeoutUntil, userId }) {
+      const description = describeNaturalMemberTimeoutExpiry(timeoutUntil);
+      await audit.publish({
+        category: "moderation",
+        discord: true,
+        eventType: "member.timeout_expired",
+        payload: { timeoutUntil: new Date(timeoutUntil).toISOString() },
+        subject: { id: userId, kind: "user" },
+        summary: description.summary,
+        title: description.title,
+      });
+      await moderationModule?.endSanction("timeout", userId);
+    },
+    onError(error, userId) {
+      logger.error({ error, userId }, "member timeout expiry tracking failed");
+    },
+    async resolveTimeoutUntil(userId) {
+      const member = await guild.members.fetch({ force: true, user: userId });
+      return member.communicationDisabledUntilTimestamp;
+    },
+  });
 
   await registerStatusCommand(guild);
   await publicationWorker?.start();
@@ -513,6 +537,13 @@ export async function startGuildCore(
   await ticketPublicationWorker?.start();
   await voiceModule?.start();
   await voicePublicationWorker?.start();
+
+  for (const member of members.values()) {
+    const timeoutUntil = member.communicationDisabledUntilTimestamp;
+    if (timeoutUntil && timeoutUntil > Date.now()) {
+      timeoutExpiryTracker.track(member.id, timeoutUntil);
+    }
+  }
 
   safeOn(Events.GuildMemberAdd, async (member) => {
     if (member.guild.id !== guildId) return;
@@ -555,6 +586,7 @@ export async function startGuildCore(
 
   safeOn(Events.GuildMemberRemove, async (member) => {
     if (member.guild.id !== guildId) return;
+    timeoutExpiryTracker.cancel(member.id);
     await removeGuildResource("member", member.id);
     if (member.user.bot) return;
     try {
@@ -574,6 +606,7 @@ export async function startGuildCore(
 
   safeOn(Events.GuildMemberUpdate, async (before, after) => {
     if (after.guild.id !== guildId) return;
+    const occurredAt = Date.now();
     await upsertGuildResource(memberCatalogEntry(after));
     const addedRoles = after.roles.cache
       .filter((role) => !before.roles.cache.has(role.id))
@@ -585,12 +618,26 @@ export async function startGuildCore(
     const timeoutChanged =
       before.communicationDisabledUntilTimestamp !==
       after.communicationDisabledUntilTimestamp;
-    if (
+    const timeoutBefore = before.communicationDisabledUntilTimestamp;
+    const timeoutAfter = after.communicationDisabledUntilTimestamp;
+    const timeoutActiveAfter =
+      timeoutAfter !== null && timeoutAfter > occurredAt;
+    const naturallyExpired =
       timeoutChanged &&
-      (!after.communicationDisabledUntilTimestamp ||
-        after.communicationDisabledUntilTimestamp <= Date.now())
-    ) {
-      await moderationModule?.endSanction("timeout", after.id);
+      timeoutBefore !== null &&
+      timeoutBefore <= occurredAt &&
+      !timeoutActiveAfter;
+    const timeoutAlreadyLogged =
+      timeoutChanged &&
+      !timeoutActiveAfter &&
+      timeoutExpiryTracker.consumeRecentExpiry(after.id);
+    if (timeoutChanged) {
+      timeoutExpiryTracker.cancel(after.id);
+      if (timeoutActiveAfter && timeoutAfter !== null) {
+        timeoutExpiryTracker.track(after.id, timeoutAfter);
+      } else {
+        await moderationModule?.endSanction("timeout", after.id);
+      }
     }
     if (removedRoles.some(({ id }) => id === resources.roles.quarantine)) {
       await moderationModule?.endSanction("quarantine", after.id);
@@ -603,7 +650,6 @@ export async function startGuildCore(
     ) {
       return;
     }
-    const occurredAt = Date.now();
     let roleAuditContext: MemberRoleAuditContext | null = null;
     if (addedRoles.length > 0 || removedRoles.length > 0) {
       try {
@@ -622,7 +668,7 @@ export async function startGuildCore(
       }
     }
     let timeoutAuditContext: MemberTimeoutAuditContext | null = null;
-    if (timeoutChanged) {
+    if (timeoutChanged && !naturallyExpired && !timeoutAlreadyLogged) {
       try {
         timeoutAuditContext = await fetchMemberTimeoutAuditContext(
           after.guild,
@@ -636,14 +682,17 @@ export async function startGuildCore(
         );
       }
     }
-    const timeoutChange = timeoutChanged
-      ? describeMemberTimeoutChange(
-          before.communicationDisabledUntilTimestamp,
-          after.communicationDisabledUntilTimestamp,
-          occurredAt,
-          timeoutAuditContext,
-        )
-      : null;
+    const timeoutChange =
+      timeoutChanged && !timeoutAlreadyLogged
+        ? naturallyExpired && timeoutBefore !== null
+          ? describeNaturalMemberTimeoutExpiry(timeoutBefore)
+          : describeMemberTimeoutChange(
+              timeoutBefore,
+              timeoutAfter,
+              occurredAt,
+              timeoutAuditContext,
+            )
+        : null;
     const roleChange = describeMemberRoleChange({
       addedRoles,
       auditContext: roleAuditContext,
@@ -656,9 +705,13 @@ export async function startGuildCore(
 
     await audit.publish({
       ...(actorId ? { actor: { id: actorId, kind: "user" as const } } : {}),
-      category: timeoutChanged ? "moderation" : "server",
+      category: timeoutChange ? "moderation" : "server",
       discord: true,
-      eventType: timeoutChanged ? "member.timeout_changed" : "member.updated",
+      eventType: timeoutChange
+        ? naturallyExpired
+          ? "member.timeout_expired"
+          : "member.timeout_changed"
+        : "member.updated",
       payload: {
         addedRoleIds: addedRoles.map(({ id }) => id),
         addedRoles: addedRoles.map(({ name }) => name),
@@ -1305,6 +1358,7 @@ export async function startGuildCore(
     audit,
     ...(moderationModule ? { moderationAppeals: moderationModule } : {}),
     async stop() {
+      timeoutExpiryTracker.stop();
       await voicePublicationWorker?.stop();
       await ticketPublicationWorker?.stop();
       await moderationPublicationWorker?.stop();

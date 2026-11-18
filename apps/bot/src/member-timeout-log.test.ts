@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   describeMemberTimeoutChange,
+  describeNaturalMemberTimeoutExpiry,
   findMemberTimeoutAuditContext,
 } from "./member-timeout-log.js";
 
@@ -78,6 +79,13 @@ describe("member timeout audit wording", () => {
     ).toEqual({
       summary: "Тайм-аут выдан до <t:1794990720:F> (<t:1794990720:R>).",
       title: "Тайм-аут выдан",
+    });
+  });
+
+  it("describes a timeout that ended naturally without a moderator", () => {
+    expect(describeNaturalMemberTimeoutExpiry(after)).toEqual({
+      summary: "Срок тайм-аута истёк <t:1794823200:R>.",
+      title: "Тайм-аут завершён",
     });
   });
 });
