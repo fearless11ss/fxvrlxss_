@@ -8,21 +8,22 @@ import {
 describe("member timeout audit wording", () => {
   const before = Date.parse("2026-11-16T08:00:00.000Z");
   const after = Date.parse("2026-11-16T10:00:00.000Z");
+  const occurredAt = Date.parse("2026-11-16T07:55:00.000Z");
 
   it("distinguishes issuing, changing, and removing a timeout", () => {
-    expect(describeMemberTimeoutChange(null, after)).toEqual({
+    expect(describeMemberTimeoutChange(null, after, occurredAt)).toEqual({
       summary: "Тайм-аут выдан до <t:1794823200:F> (<t:1794823200:R>).",
       title: "Тайм-аут выдан",
     });
-    expect(describeMemberTimeoutChange(before, after)).toEqual({
+    expect(describeMemberTimeoutChange(before, after, occurredAt)).toEqual({
       summary: "Тайм-аут продлён: <t:1794816000:F> → <t:1794823200:F>.",
       title: "Тайм-аут продлён",
     });
-    expect(describeMemberTimeoutChange(after, before)).toEqual({
+    expect(describeMemberTimeoutChange(after, before, occurredAt)).toEqual({
       summary: "Срок тайм-аута сокращён: <t:1794823200:F> → <t:1794816000:F>.",
       title: "Срок тайм-аута сокращён",
     });
-    expect(describeMemberTimeoutChange(before, null)).toEqual({
+    expect(describeMemberTimeoutChange(before, null, occurredAt)).toEqual({
       summary: "Тайм-аут снят.",
       title: "Тайм-аут снят",
     });
@@ -53,7 +54,7 @@ describe("member timeout audit wording", () => {
       ),
     ).toEqual({ actorId: "moderator-1", reason: "нарушение правил" });
     expect(
-      describeMemberTimeoutChange(before, null, {
+      describeMemberTimeoutChange(before, null, occurredAt, {
         actorId: "moderator-1",
         reason: "нарушение правил",
       }),
@@ -64,6 +65,19 @@ describe("member timeout audit wording", () => {
         "Причина: нарушение правил.",
       ].join("\n"),
       title: "Тайм-аут снят",
+    });
+  });
+
+  it("treats a new timeout after an expired cached value as issuance", () => {
+    const staleBefore = Date.parse("2026-11-17T13:26:00.000Z");
+    const eventTime = Date.parse("2026-11-18T08:27:00.000Z");
+    const newTimeout = Date.parse("2026-11-18T08:32:00.000Z");
+
+    expect(
+      describeMemberTimeoutChange(staleBefore, newTimeout, eventTime),
+    ).toEqual({
+      summary: "Тайм-аут выдан до <t:1794990720:F> (<t:1794990720:R>).",
+      title: "Тайм-аут выдан",
     });
   });
 });

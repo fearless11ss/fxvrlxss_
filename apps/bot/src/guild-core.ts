@@ -640,6 +640,7 @@ export async function startGuildCore(
       ? describeMemberTimeoutChange(
           before.communicationDisabledUntilTimestamp,
           after.communicationDisabledUntilTimestamp,
+          occurredAt,
           timeoutAuditContext,
         )
       : null;

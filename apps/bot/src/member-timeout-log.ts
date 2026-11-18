@@ -73,9 +73,12 @@ export function findMemberTimeoutAuditContext(
 export function describeMemberTimeoutChange(
   before: number | null,
   after: number | null,
+  occurredAt: number,
   auditContext?: MemberTimeoutAuditContext | null,
 ): MemberTimeoutChangeDescription {
-  if (before === null && after !== null) {
+  const beforeActive = before !== null && before > occurredAt;
+  const afterActive = after !== null && after > occurredAt;
+  if (!beforeActive && afterActive && after !== null) {
     return {
       summary: withAuditContext(
         `Тайм-аут выдан до ${discordTimestamp(after, "F")} (${discordTimestamp(after, "R")}).`,
@@ -84,13 +87,13 @@ export function describeMemberTimeoutChange(
       title: "Тайм-аут выдан",
     };
   }
-  if (before !== null && after === null) {
+  if (beforeActive && !afterActive) {
     return {
       summary: withAuditContext("Тайм-аут снят.", auditContext),
       title: "Тайм-аут снят",
     };
   }
-  if (before !== null && after !== null) {
+  if (beforeActive && afterActive && before !== null && after !== null) {
     const extended = after > before;
     return {
       summary: withAuditContext(
@@ -98,6 +101,12 @@ export function describeMemberTimeoutChange(
         auditContext,
       ),
       title: extended ? "Тайм-аут продлён" : "Срок тайм-аута сокращён",
+    };
+  }
+  if (!afterActive && before !== after) {
+    return {
+      summary: withAuditContext("Тайм-аут снят.", auditContext),
+      title: "Тайм-аут снят",
     };
   }
   return { summary: "Тайм-аут не изменился.", title: "Тайм-аут не изменился" };
