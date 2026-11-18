@@ -1,6 +1,7 @@
 import type { Database } from "@fxvrlxss/database/client";
 import { moderationCases } from "@fxvrlxss/database/schema";
-import { and, desc, eq, gt, inArray, isNull, or, sum } from "drizzle-orm";
+import { moderationAppealWindowDays } from "@fxvrlxss/domain/moderation-case";
+import { and, desc, eq, gt, isNull, or, sql, sum } from "drizzle-orm";
 
 import type {
   ModerationCaseRecord,
@@ -14,7 +15,8 @@ function record(
   const evidence = row.evidence as Partial<ModerationEvidence>;
   return {
     appliedAction: row.appliedAction,
-    appealOutcome: row.appealOutcome,
+    appealStartedAt: row.appealStartedAt,
+    appealStatus: row.appealStatus,
     appealReason: row.appealReason,
     appealResolvedAt: row.appealResolvedAt,
     appealResolvedById: row.appealResolvedById,
@@ -42,18 +44,18 @@ function record(
         ? { source: evidence.source }
         : {}),
     },
-    expiresAt: row.expiresAt,
+    consequenceEndsAt: row.consequenceEndsAt,
     guildId: row.guildId,
     id: row.id,
     moderatorId: row.moderatorId,
     number: row.number,
     points: row.points,
     requestedAction: row.requestedAction,
-    resolutionReason: row.resolutionReason,
-    resolvedAt: row.resolvedAt,
-    resolvedById: row.resolvedById,
+    pointsExpireAt: row.pointsExpireAt,
+    revocationReason: row.revocationReason,
+    revokedAt: row.revokedAt,
+    revokedById: row.revokedById,
     sourceEventKey: row.sourceEventKey,
-    status: row.status,
     summary: row.summary,
     timeoutMinutes: row.timeoutMinutes,
     userId: row.userId,
@@ -79,11 +81,8 @@ export class DatabaseModerationRepository implements ModerationRepository {
         and(
           eq(moderationCases.guildId, guildId),
           eq(moderationCases.userId, userId),
-          inArray(moderationCases.status, ["open", "appealed"]),
-          or(
-            isNull(moderationCases.expiresAt),
-            gt(moderationCases.expiresAt, now),
-          ),
+          isNull(moderationCases.revokedAt),
+          gt(moderationCases.pointsExpireAt, now),
         ),
       );
     return Number(row?.value ?? 0);
@@ -92,16 +91,29 @@ export class DatabaseModerationRepository implements ModerationRepository {
   async beginAppeal(
     input: Parameters<ModerationRepository["beginAppeal"]>[0],
   ): Promise<ModerationCaseRecord | null> {
+    const now = new Date();
     const [updated] = await this.#database
       .update(moderationCases)
-      .set({ status: "appealed", updatedAt: new Date() })
+      .set({
+        appealStartedAt: now,
+        appealStatus: "pending",
+        updatedAt: now,
+      })
       .where(
         and(
           eq(moderationCases.guildId, input.guildId),
           eq(moderationCases.number, input.number),
           eq(moderationCases.userId, input.userId),
-          eq(moderationCases.status, "open"),
-          isNull(moderationCases.appealOutcome),
+          eq(moderationCases.appealStatus, "none"),
+          isNull(moderationCases.revokedAt),
+          or(
+            isNull(moderationCases.consequenceEndsAt),
+            gt(moderationCases.consequenceEndsAt, now),
+          ),
+          gt(
+            moderationCases.createdAt,
+            new Date(now.getTime() - moderationAppealWindowDays * 86_400_000),
+          ),
         ),
       )
       .returning();
@@ -115,8 +127,10 @@ export class DatabaseModerationRepository implements ModerationRepository {
       .insert(moderationCases)
       .values({
         appliedAction: input.appliedAction,
+        consequenceEndsAt: input.consequenceEndsAt,
+        createdAt: input.createdAt,
         evidence: input.evidence,
-        expiresAt: input.expiresAt,
+        pointsExpireAt: input.pointsExpireAt,
         guildId: input.guildId,
         moderatorId: input.moderatorId,
         points: input.points,
@@ -126,6 +140,7 @@ export class DatabaseModerationRepository implements ModerationRepository {
           : {}),
         summary: input.summary,
         timeoutMinutes: input.timeoutMinutes,
+        updatedAt: input.createdAt,
         userId: input.userId,
       })
       .onConflictDoNothing()
@@ -165,6 +180,38 @@ export class DatabaseModerationRepository implements ModerationRepository {
     return row ? record(row) : null;
   }
 
+  async endSanction(
+    input: Parameters<ModerationRepository["endSanction"]>[0],
+  ): Promise<void> {
+    const now = new Date();
+    const actionCondition =
+      input.action === "quarantine"
+        ? sql`${moderationCases.evidence}->>'automodAction' = 'quarantine'`
+        : eq(moderationCases.appliedAction, input.action);
+    await this.#database
+      .update(moderationCases)
+      .set({
+        consequenceEndsAt: sql`CASE
+          WHEN ${moderationCases.points} > 0 AND ${moderationCases.pointsExpireAt} > ${now}
+          THEN ${moderationCases.pointsExpireAt}
+          ELSE ${now}
+        END`,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(moderationCases.guildId, input.guildId),
+          eq(moderationCases.userId, input.userId),
+          isNull(moderationCases.revokedAt),
+          actionCondition,
+          or(
+            isNull(moderationCases.consequenceEndsAt),
+            gt(moderationCases.consequenceEndsAt, now),
+          ),
+        ),
+      );
+  }
+
   async listForUser(
     guildId: string,
     userId: string,
@@ -192,49 +239,48 @@ export class DatabaseModerationRepository implements ModerationRepository {
     const [updated] = await this.#database
       .update(moderationCases)
       .set({
-        appealOutcome: input.outcome,
+        appealStatus: input.outcome,
         appealReason: input.reason,
         appealResolvedAt: now,
-        appealResolvedById: input.resolvedById,
+        appealResolvedById: input.actorId,
         ...(approved
           ? {
-              resolutionReason: `Обжалование удовлетворено: ${input.reason}`,
-              resolvedAt: now,
-              resolvedById: input.resolvedById,
+              revocationReason: `Обжалование удовлетворено: ${input.reason}`,
+              revokedAt: now,
+              revokedById: input.actorId,
             }
           : {}),
-        status: approved ? "resolved" : "open",
         updatedAt: now,
       })
       .where(
         and(
           eq(moderationCases.guildId, input.guildId),
           eq(moderationCases.number, input.number),
-          eq(moderationCases.status, "appealed"),
+          eq(moderationCases.appealStatus, "pending"),
         ),
       )
       .returning();
     return updated ? record(updated) : null;
   }
 
-  async resolve(
-    input: Parameters<ModerationRepository["resolve"]>[0],
+  async revoke(
+    input: Parameters<ModerationRepository["revoke"]>[0],
   ): Promise<ModerationCaseRecord | null> {
     const now = new Date();
     const [updated] = await this.#database
       .update(moderationCases)
       .set({
-        resolutionReason: input.reason,
-        resolvedAt: now,
-        resolvedById: input.resolvedById,
-        status: "resolved",
+        revocationReason: input.reason,
+        revokedAt: now,
+        revokedById: input.actorId,
         updatedAt: now,
       })
       .where(
         and(
           eq(moderationCases.guildId, input.guildId),
           eq(moderationCases.number, input.number),
-          inArray(moderationCases.status, ["open", "appealed"]),
+          isNull(moderationCases.revokedAt),
+          eq(moderationCases.appealStatus, "none"),
         ),
       )
       .returning();

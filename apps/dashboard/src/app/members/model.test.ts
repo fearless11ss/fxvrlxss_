@@ -9,23 +9,29 @@ describe("member directory model", () => {
     const members = buildMemberDirectory({
       cases: [
         {
-          expiresAt: new Date("2026-12-01T00:00:00.000Z"),
+          appealStatus: "none",
+          consequenceEndsAt: new Date("2026-12-01T00:00:00.000Z"),
           points: 2,
-          status: "open",
+          pointsExpireAt: new Date("2026-12-01T00:00:00.000Z"),
+          revokedAt: null,
           updatedAt: new Date("2026-11-16T10:00:00.000Z"),
           userId: "1000001",
         },
         {
-          expiresAt: new Date("2026-11-01T00:00:00.000Z"),
+          appealStatus: "none",
+          consequenceEndsAt: new Date("2026-11-01T00:00:00.000Z"),
           points: 4,
-          status: "open",
+          pointsExpireAt: new Date("2026-11-01T00:00:00.000Z"),
+          revokedAt: null,
           updatedAt: new Date("2026-11-15T10:00:00.000Z"),
           userId: "1000001",
         },
         {
-          expiresAt: null,
+          appealStatus: "approved",
+          consequenceEndsAt: null,
           points: 5,
-          status: "resolved",
+          pointsExpireAt: new Date("2026-12-01T00:00:00.000Z"),
+          revokedAt: new Date("2026-11-14T10:00:00.000Z"),
           updatedAt: new Date("2026-11-14T10:00:00.000Z"),
           userId: "2000002",
         },
@@ -56,7 +62,7 @@ describe("member directory model", () => {
     expect(members).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          activeCaseCount: 2,
+          activeCaseCount: 1,
           activePoints: 2,
           activeTicketCount: 0,
           caseCount: 2,
@@ -84,9 +90,11 @@ describe("member directory model", () => {
     const members = buildMemberDirectory({
       cases: [
         {
-          expiresAt: null,
+          appealStatus: "none",
+          consequenceEndsAt: null,
           points: 1,
-          status: "open",
+          pointsExpireAt: new Date("2026-12-01T00:00:00.000Z"),
+          revokedAt: null,
           updatedAt: now,
           userId: "1000001",
         },

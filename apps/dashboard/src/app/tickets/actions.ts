@@ -2,8 +2,8 @@
 
 import { auditEvents, configurationVersions } from "@fxvrlxss/database/schema";
 import {
+  supportTicketTypeKeys,
   ticketConfigSchema,
-  ticketTypeKeySchema,
 } from "@fxvrlxss/domain/ticket-config";
 import { and, eq, max } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -49,7 +49,7 @@ export async function saveTicketDraft(
     panelTitle: formData.get("panelTitle"),
     staffRoleIds: idList(formData, "staffRoleIds"),
     transcriptEnabled: enabled(formData, "transcriptEnabled"),
-    types: ticketTypeKeySchema.options.map((key) => ({
+    types: supportTicketTypeKeys.map((key) => ({
       description: formData.get(`type-${key}-description`),
       enabled: enabled(formData, `type-${key}-enabled`),
       key,

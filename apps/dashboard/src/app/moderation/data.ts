@@ -10,7 +10,7 @@ import {
   moderationConfigSchema,
   type ModerationConfig,
 } from "@fxvrlxss/domain/moderation-config";
-import { and, count, desc, eq, inArray } from "drizzle-orm";
+import { and, count, desc, eq, gt, isNull, or } from "drizzle-orm";
 
 import { getDatabase } from "../../lib/database";
 import { getDashboardEnvironment } from "../../lib/environment";
@@ -68,7 +68,11 @@ export async function getModerationPageData(): Promise<{
       .where(
         and(
           eq(moderationCases.guildId, environment.guildId),
-          inArray(moderationCases.status, ["open", "appealed"]),
+          isNull(moderationCases.revokedAt),
+          or(
+            isNull(moderationCases.consequenceEndsAt),
+            gt(moderationCases.consequenceEndsAt, new Date()),
+          ),
         ),
       ),
   ]);

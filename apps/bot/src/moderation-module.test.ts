@@ -11,24 +11,25 @@ import type { ModerationCaseRecord } from "./moderation-repository.js";
 
 const item: ModerationCaseRecord = {
   appliedAction: "timeout",
-  appealOutcome: null,
+  appealStartedAt: null,
+  appealStatus: "none",
   appealReason: null,
   appealResolvedAt: null,
   appealResolvedById: null,
   createdAt: new Date("2026-11-15T08:00:00.000Z"),
+  consequenceEndsAt: new Date("2099-02-13T08:00:00.000Z"),
   evidence: { reference: null },
-  expiresAt: new Date("2027-02-13T08:00:00.000Z"),
   guildId: "guild-1",
   id: "case-1",
   moderatorId: "staff-1",
   number: 7,
   points: 2,
+  pointsExpireAt: new Date("2099-02-13T08:00:00.000Z"),
   requestedAction: "timeout",
-  resolutionReason: null,
-  resolvedAt: null,
-  resolvedById: null,
+  revocationReason: null,
+  revokedAt: null,
+  revokedById: null,
   sourceEventKey: null,
-  status: "open",
   summary: "Причина",
   timeoutMinutes: 60,
   userId: "user-1",
@@ -70,7 +71,6 @@ describe("manual moderation Components V2", () => {
         activePoints: vi.fn(() => Promise.resolve(0)),
         create: vi.fn(() => Promise.resolve({ created: true, record: item })),
       } as never,
-      ticketChannelId: "tickets-1",
     });
 
     await Promise.all(
@@ -149,7 +149,6 @@ describe("manual moderation Components V2", () => {
         activePoints: vi.fn(() => Promise.resolve(0)),
         create,
       } as never,
-      ticketChannelId: "tickets-1",
     });
 
     const violation = (action: "points" | "timeout", index: number) =>
@@ -194,7 +193,6 @@ describe("manual moderation Components V2", () => {
       logger: {} as never,
       quarantineRoleId: "quarantine-1",
       repository: { activePoints } as never,
-      ticketChannelId: "tickets-1",
     });
 
     const operation = moderation.applyAutomodViolation({
@@ -261,10 +259,10 @@ describe("manual moderation Components V2", () => {
     expect(notice).not.toContain("#чат");
   });
 
-  it("sends non-ban sanctions to the main ticket channel", () => {
+  it("sends timeouts to the external appeal server", () => {
     const notice = buildModerationNotice({
       action: "timeout",
-      appealUrl: "https://discord.com/channels/guild/tickets",
+      appealUrl: "https://discord.gg/appeal",
       caseNumber: 13,
       points: 0,
       serverName: "fxvrlxss_",
@@ -275,15 +273,62 @@ describe("manual moderation Components V2", () => {
     expect(notice).toContain(
       "Вы получили тайм-аут на сервере **fxvrlxss\\_** на **60 мин.**.",
     );
-    expect(notice).toContain(
-      "Подать апелляцию: https://discord.com/channels/guild/tickets",
+    expect(notice).toContain("Подать апелляцию: https://discord.gg/appeal");
+  });
+
+  it("routes an applied timeout notice through the appeal invite", async () => {
+    const send = vi.fn<(message: unknown) => Promise<void>>(() =>
+      Promise.resolve(),
+    );
+    const timeout = vi.fn(() => Promise.resolve());
+    const moderation = new ModerationModule({
+      appealInviteUrl: "https://discord.gg/appeal",
+      audit: { publish: vi.fn(() => Promise.resolve()) } as never,
+      guild: {
+        channels: { fetch: vi.fn() },
+        client: {
+          user: { id: "bot-1" },
+          users: { fetch: vi.fn(() => Promise.resolve({ send })) },
+        },
+        id: "guild-1",
+        members: {
+          fetch: vi.fn(() => Promise.resolve({ moderatable: true, timeout })),
+        },
+        name: "test",
+        roles: { cache: new Collection() },
+      } as never,
+      logger: {} as never,
+      quarantineRoleId: "quarantine-1",
+      repository: {
+        activePoints: vi.fn(() => Promise.resolve(0)),
+        create: vi.fn(() => Promise.resolve({ created: true, record: item })),
+      } as never,
+    });
+
+    await moderation.applyAutomodViolation({
+      action: "timeout",
+      applyThresholds: false,
+      channelId: "channel-1",
+      deleteMessage: false,
+      messageId: "message-1",
+      points: 0,
+      signals: ["flood"],
+      sourceEventKey: "external-appeal-timeout",
+      summary: "флуд",
+      timeoutMinutes: 60,
+      userId: "user-1",
+    });
+
+    expect(timeout).toHaveBeenCalledOnce();
+    expect(JSON.stringify(send.mock.calls[0]?.[0])).toContain(
+      "https://discord.gg/appeal",
     );
   });
 
   it("renders member direct messages with Components V2", () => {
     const component = buildModerationNoticeComponents({
       action: "timeout",
-      appealUrl: "https://discord.com/channels/guild/tickets",
+      appealUrl: "https://discord.gg/appeal",
       caseNumber: 7,
       points: 0,
       serverName: "test",
@@ -295,6 +340,6 @@ describe("manual moderation Components V2", () => {
     expect(component?.type).toBe(ComponentType.Container);
     expect(serialized).toContain("## Тайм-аут");
     expect(serialized).toContain("Дело: **#0007**");
-    expect(serialized).toContain("https://discord.com/channels/guild/tickets");
+    expect(serialized).toContain("https://discord.gg/appeal");
   });
 });

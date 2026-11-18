@@ -78,6 +78,13 @@
       "when": 1794895200000,
       "tag": "0010_member_role_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794981600000,
+      "tag": "0011_moderation_case_lifecycle",
+      "breakpoints": true
     }
   ]
 }

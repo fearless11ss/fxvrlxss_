@@ -7,6 +7,10 @@ import {
   type ModerationConfig,
 } from "@fxvrlxss/domain/moderation-config";
 import {
+  moderationCaseLifecycle,
+  moderationConsequenceEndsAt,
+} from "@fxvrlxss/domain/moderation-case";
+import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -245,12 +249,15 @@ function buildModerationHistory(input: {
   readonly userId: string;
 }): ContainerBuilder[] {
   const lines = input.cases.map((item) => {
+    const lifecycle = moderationCaseLifecycle(item, new Date());
     const state =
-      item.status === "resolved"
-        ? "отменено"
-        : item.status === "appealed"
-          ? "обжалуется"
-          : "активно";
+      item.appealStatus === "pending"
+        ? "обжалуется"
+        : lifecycle === "revoked"
+          ? "отменено"
+          : lifecycle === "completed"
+            ? "завершено"
+            : "действует";
     return `**#${caseNumber(item.number)}** · ${caseActionLabel(item)} · ${item.points} б. · ${state} · <t:${Math.floor(item.createdAt.getTime() / 1_000)}:f>`;
   });
   const container = new ContainerBuilder()
@@ -265,7 +272,11 @@ function buildModerationHistory(input: {
       ),
     );
   const active = input.cases
-    .filter((item) => item.status === "open")
+    .filter(
+      (item) =>
+        item.appealStatus === "none" &&
+        moderationCaseLifecycle(item, new Date()) === "active",
+    )
     .slice(0, 5);
   if (active.length > 0) {
     container.addActionRowComponents(
@@ -379,7 +390,6 @@ export class ModerationModule
   readonly #logger: Logger;
   readonly #quarantineRoleId: string;
   readonly #repository: ModerationRepository;
-  readonly #ticketUrl: string;
   #config: ModerationConfig;
 
   constructor(options: {
@@ -389,7 +399,6 @@ export class ModerationModule
     readonly logger: Logger;
     readonly quarantineRoleId: string;
     readonly repository: ModerationRepository;
-    readonly ticketChannelId: string;
   }) {
     this.#appealInviteUrl = options.appealInviteUrl;
     this.#audit = options.audit;
@@ -397,7 +406,6 @@ export class ModerationModule
     this.#logger = options.logger;
     this.#quarantineRoleId = options.quarantineRoleId;
     this.#repository = options.repository;
-    this.#ticketUrl = `https://discord.com/channels/${options.guild.id}/${options.ticketChannelId}`;
     this.#config = {
       ...defaultModerationConfig,
       staffRoleIds: options.guild.roles.cache
@@ -421,6 +429,17 @@ export class ModerationModule
   apply(config: ModerationConfig): Promise<void> {
     this.#config = moderationConfigSchema.parse(config);
     return Promise.resolve();
+  }
+
+  endSanction(
+    action: "ban" | "quarantine" | "timeout",
+    userId: string,
+  ): Promise<void> {
+    return this.#repository.endSanction({
+      action,
+      guildId: this.#guild.id,
+      userId,
+    });
   }
 
   async applyAutomodViolation(
@@ -508,8 +527,24 @@ export class ModerationModule
       ["timeout", "quarantine", "kick", "ban"].includes(input.action);
     let item: ModerationCaseRecord | undefined;
     if (tracked) {
+      const createdAt = new Date();
+      const pointsExpireAt = new Date(
+        createdAt.getTime() + this.#config.pointExpiryDays * 86_400_000,
+      );
       const creation = await this.#repository.create({
         appliedAction: effectiveDecision.action,
+        consequenceEndsAt: moderationConsequenceEndsAt({
+          action: effectiveDecision.action,
+          indefinite:
+            effectiveDecision.action === "ban" ||
+            (input.action === "quarantine" &&
+              effectiveDecision.action !== "kick"),
+          issuedAt: createdAt,
+          points: input.points,
+          pointsExpireAt,
+          timeoutMinutes: effectiveDecision.timeoutMinutes,
+        }),
+        createdAt,
         evidence: {
           automodAction: input.action,
           channelId: input.channelId,
@@ -521,12 +556,10 @@ export class ModerationModule
           signals: input.signals,
           source: "automod",
         },
-        expiresAt: new Date(
-          Date.now() + this.#config.pointExpiryDays * 86_400_000,
-        ),
         guildId: this.#guild.id,
         moderatorId: this.#guild.client.user.id,
         points: input.points,
+        pointsExpireAt,
         requestedAction,
         sourceEventKey: input.sourceEventKey,
         summary: input.summary,
@@ -562,6 +595,7 @@ export class ModerationModule
                 : input.action === "points" || input.action === "quarantine"
                   ? input.action
                   : "warn",
+            appealable: moderationCaseLifecycle(item, new Date()) === "active",
             caseNumber: item.number,
             channelId: input.channelId,
             points: input.points,
@@ -606,11 +640,11 @@ export class ModerationModule
       }
     } catch (error) {
       if (item) {
-        await this.#repository.resolve({
+        await this.#repository.revoke({
           guildId: this.#guild.id,
           number: item.number,
           reason: `Действие автомода не применено: ${error instanceof Error ? error.message : String(error)}`,
-          resolvedById: this.#guild.client.user.id,
+          actorId: this.#guild.client.user.id,
         });
       }
       throw error;
@@ -714,7 +748,7 @@ export class ModerationModule
 
   async checkAppeal(number: number, userId: string) {
     const item = await this.#repository.findByNumber(this.#guild.id, number);
-    return assessModerationAppeal(item, userId);
+    return assessModerationAppeal(item, userId, new Date());
   }
 
   async beginAppeal(number: number, userId: string): Promise<boolean> {
@@ -737,7 +771,7 @@ export class ModerationModule
       this.#guild.id,
       input.caseNumber,
     );
-    if (!item || item.status !== "appealed") return false;
+    if (!item || item.appealStatus !== "pending") return false;
     if (input.outcome === "approved") {
       await this.#reverseDiscordAction(item, input.reason);
     }
@@ -746,7 +780,7 @@ export class ModerationModule
       number: input.caseNumber,
       outcome: input.outcome,
       reason: input.reason,
-      resolvedById: input.actorId,
+      actorId: input.actorId,
     });
     if (!updated) return false;
     const outcomeLabel =
@@ -865,14 +899,14 @@ export class ModerationModule
     ) {
       const number = Number(parts[3]);
       const item = await this.#repository.findByNumber(this.#guild.id, number);
-      if (!item || item.status === "resolved") {
+      if (!item || moderationCaseLifecycle(item, new Date()) !== "active") {
         await interaction.reply({
-          content: "Дело уже отменено или не найдено.",
+          content: "Дело уже завершено, отменено или не найдено.",
           flags: MessageFlags.Ephemeral,
         });
         return true;
       }
-      if (item.status === "appealed") {
+      if (item.appealStatus === "pending") {
         await interaction.reply({
           content:
             "Дело сейчас рассматривается в тикете обжалования. Решение нужно принять при закрытии тикета.",
@@ -948,16 +982,27 @@ export class ModerationModule
           };
     let item: ModerationCaseRecord | undefined;
     try {
+      const createdAt = new Date();
+      const pointsExpireAt = new Date(
+        createdAt.getTime() + this.#config.pointExpiryDays * 86_400_000,
+      );
       item = (
         await this.#repository.create({
           appliedAction: decision.action,
+          consequenceEndsAt: moderationConsequenceEndsAt({
+            action: decision.action,
+            indefinite: decision.action === "ban",
+            issuedAt: createdAt,
+            points,
+            pointsExpireAt,
+            timeoutMinutes: decision.timeoutMinutes,
+          }),
+          createdAt,
           evidence: { reference: evidence || null },
-          expiresAt: new Date(
-            Date.now() + this.#config.pointExpiryDays * 86_400_000,
-          ),
           guildId: this.#guild.id,
           moderatorId: moderator.id,
           points,
+          pointsExpireAt,
           requestedAction,
           summary: reason,
           timeoutMinutes: decision.timeoutMinutes,
@@ -966,6 +1011,7 @@ export class ModerationModule
       ).record;
       await this.#notifyMember({
         action: decision.action,
+        appealable: moderationCaseLifecycle(item, new Date()) === "active",
         caseNumber: item.number,
         ...(interaction.channelId ? { channelId: interaction.channelId } : {}),
         points,
@@ -981,11 +1027,11 @@ export class ModerationModule
           decision.timeoutMinutes,
         );
       } catch (error) {
-        await this.#repository.resolve({
+        await this.#repository.revoke({
           guildId: this.#guild.id,
           number: item.number,
           reason: `Действие не применено: ${error instanceof Error ? error.message : String(error)}`,
-          resolvedById: this.#guild.client.user.id,
+          actorId: this.#guild.client.user.id,
         });
         throw error;
       }
@@ -1071,14 +1117,14 @@ export class ModerationModule
     number: number,
   ): Promise<void> {
     const item = await this.#repository.findByNumber(this.#guild.id, number);
-    if (!item || item.status === "resolved") {
+    if (!item || moderationCaseLifecycle(item, new Date()) !== "active") {
       await interaction.reply({
-        content: "Дело уже отменено или не найдено.",
+        content: "Дело уже завершено, отменено или не найдено.",
         flags: MessageFlags.Ephemeral,
       });
       return;
     }
-    if (item.status === "appealed") {
+    if (item.appealStatus === "pending") {
       await interaction.reply({
         content: "Дело сейчас рассматривается в тикете обжалования.",
         flags: MessageFlags.Ephemeral,
@@ -1087,11 +1133,11 @@ export class ModerationModule
     }
     const reason = interaction.fields.getTextInputValue("reason").trim();
     await this.#reverseDiscordAction(item, reason);
-    const resolved = await this.#repository.resolve({
+    const resolved = await this.#repository.revoke({
       guildId: this.#guild.id,
       number,
       reason,
-      resolvedById: interaction.user.id,
+      actorId: interaction.user.id,
     });
     if (!resolved) {
       await interaction.reply({
@@ -1146,6 +1192,7 @@ export class ModerationModule
 
   async #notifyMember(input: {
     readonly action: ModerationNoticeAction;
+    readonly appealable: boolean;
     readonly caseNumber: number | null;
     readonly channelId?: string;
     readonly points: number;
@@ -1155,10 +1202,9 @@ export class ModerationModule
   }): Promise<void> {
     const noticeInput: ModerationNoticeInput = {
       action: input.action,
-      appealUrl:
-        input.action === "ban"
-          ? (this.#appealInviteUrl ?? this.#ticketUrl)
-          : this.#ticketUrl,
+      ...(input.appealable && this.#appealInviteUrl
+        ? { appealUrl: this.#appealInviteUrl }
+        : {}),
       caseNumber: input.caseNumber,
       points: input.points,
       serverName: this.#guild.name,

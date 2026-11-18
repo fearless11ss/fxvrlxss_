@@ -442,7 +442,6 @@ export async function startGuildCore(
         logger,
         quarantineRoleId: resources.roles.quarantine,
         repository: options.moderationRepository,
-        ticketChannelId: resources.channels.support.openTicket,
       })
     : undefined;
   const moderationPublicationWorker =
@@ -586,6 +585,16 @@ export async function startGuildCore(
     const timeoutChanged =
       before.communicationDisabledUntilTimestamp !==
       after.communicationDisabledUntilTimestamp;
+    if (
+      timeoutChanged &&
+      (!after.communicationDisabledUntilTimestamp ||
+        after.communicationDisabledUntilTimestamp <= Date.now())
+    ) {
+      await moderationModule?.endSanction("timeout", after.id);
+    }
+    if (removedRoles.some(({ id }) => id === resources.roles.quarantine)) {
+      await moderationModule?.endSanction("quarantine", after.id);
+    }
     if (
       addedRoles.length === 0 &&
       removedRoles.length === 0 &&
@@ -918,6 +927,7 @@ export async function startGuildCore(
 
   safeOn(Events.GuildBanRemove, async (ban) => {
     if (ban.guild.id !== guildId) return;
+    await moderationModule?.endSanction("ban", ban.user.id);
     await audit.publish({
       category: "moderation",
       discord: true,

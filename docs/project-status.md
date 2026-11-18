@@ -4,7 +4,7 @@ tags:
   - fxvrlxss
   - status
 status: active
-updated: 2026-11-17
+updated: 2026-11-18
 ---
 
 # Implementation status
@@ -35,11 +35,11 @@ updated: 2026-11-17
 - [x] Discord-native invitation AutoMod publication adapter
 - [x] Custom message-rule runtime with delete, timeout, quarantine, kick, and ban actions
 - [x] Searchable role and channel selectors backed by a bot-synchronized catalog
-- [x] Moderation sanctions, points, evidence, and appeals
+- [x] Moderation sanctions with independent consequence, point, revocation, and appeal lifecycles
 - [x] Split Discord log routing and full database event journal foundation
 - [x] Searchable read-only audit journal in the owner dashboard
 - [x] Read-only member cards with role snapshots, search, filters, and unified case, ticket, and lifecycle history
-- [x] Versioned ticket panel, private channels, staff workflow, and transcripts
+- [x] Versioned support and bug-report panel, isolated appeal server, private channels, staff workflow, and transcripts
 - [x] Temporary voice-room lifecycle, owner controls, persistent access lists, recovery, and dashboard configuration
 - [x] Additive staging guild blueprint reconciliation and dry-run
 - [ ] Destructive production cleanup dry-run

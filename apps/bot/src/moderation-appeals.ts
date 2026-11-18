@@ -1,3 +1,9 @@
+import {
+  moderationAppealDeadline,
+  moderationCaseLifecycle,
+  type ModerationAppealStatus,
+} from "@fxvrlxss/domain/moderation-case";
+
 export type ModerationAppealOutcome = "approved" | "denied" | "withdrawn";
 
 export type ModerationAppealEligibility =
@@ -5,28 +11,43 @@ export type ModerationAppealEligibility =
   | {
       readonly eligible: false;
       readonly reason:
-        "already-open" | "already-reviewed" | "closed" | "not-found";
+        | "already-open"
+        | "already-reviewed"
+        | "completed"
+        | "not-found"
+        | "revoked"
+        | "window-expired";
     };
 
 export function assessModerationAppeal(
   item: {
-    readonly appealOutcome: ModerationAppealOutcome | null;
-    readonly status: "appealed" | "open" | "resolved";
+    readonly appealStatus: ModerationAppealStatus;
+    readonly consequenceEndsAt: Date | null;
+    readonly createdAt: Date;
+    readonly revokedAt: Date | null;
     readonly userId: string;
   } | null,
   userId: string,
+  now: Date = new Date(),
 ): ModerationAppealEligibility {
   if (!item || item.userId !== userId) {
     return { eligible: false, reason: "not-found" };
   }
-  if (item.appealOutcome !== null) {
-    return { eligible: false, reason: "already-reviewed" };
-  }
-  if (item.status === "appealed") {
+  if (item.appealStatus === "pending") {
     return { eligible: false, reason: "already-open" };
   }
-  if (item.status !== "open") {
-    return { eligible: false, reason: "closed" };
+  if (item.appealStatus !== "none") {
+    return { eligible: false, reason: "already-reviewed" };
+  }
+  const lifecycle = moderationCaseLifecycle(item, now);
+  if (lifecycle === "revoked") {
+    return { eligible: false, reason: "revoked" };
+  }
+  if (lifecycle === "completed") {
+    return { eligible: false, reason: "completed" };
+  }
+  if (moderationAppealDeadline(item.createdAt) <= now) {
+    return { eligible: false, reason: "window-expired" };
   }
   return { eligible: true };
 }

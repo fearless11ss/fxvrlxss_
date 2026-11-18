@@ -3,6 +3,7 @@ import { z } from "zod";
 export const ticketTypeKeySchema = z.enum([
   "help",
   "member-report",
+  "bug-report",
   "punishment-appeal",
   "partnership",
 ]);
@@ -26,22 +27,66 @@ export const ticketConfigSchema = z
     panelTitle: z.string().trim().min(1).max(80),
     staffRoleIds: z.array(z.string().min(1)).max(20),
     transcriptEnabled: z.boolean(),
-    types: z.array(ticketTypeSchema).length(4),
+    types: z.array(ticketTypeSchema).min(1).max(5),
   })
   .superRefine((config, context) => {
-    const keys = new Set(config.types.map(({ key }) => key));
-    for (const key of ticketTypeKeySchema.options) {
-      if (!keys.has(key)) {
-        context.addIssue({
-          code: "custom",
-          message: `Missing ticket type: ${key}`,
-          path: ["types"],
-        });
-      }
+    const keys = config.types.map(({ key }) => key);
+    if (new Set(keys).size !== keys.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Ticket type keys must be unique",
+        path: ["types"],
+      });
     }
   });
 
 export type TicketConfig = z.infer<typeof ticketConfigSchema>;
+
+export const supportTicketTypeKeys = [
+  "help",
+  "member-report",
+  "bug-report",
+  "partnership",
+] as const satisfies readonly TicketTypeKey[];
+
+const supportTypeDefaults: Readonly<
+  Record<(typeof supportTicketTypeKeys)[number], TicketConfig["types"][number]>
+> = {
+  "bug-report": {
+    description: "Сообщить об ошибке в работе сервера или бота.",
+    enabled: true,
+    key: "bug-report",
+    label: "Баг-репорт",
+  },
+  help: {
+    description: "Помощь по серверу, доступу, ролям и другим вопросам.",
+    enabled: true,
+    key: "help",
+    label: "Помощь",
+  },
+  "member-report": {
+    description: "Сообщить команде о нарушении со стороны участника.",
+    enabled: true,
+    key: "member-report",
+    label: "Жалоба на участника",
+  },
+  partnership: {
+    description: "Предложить партнёрство или совместный проект.",
+    enabled: true,
+    key: "partnership",
+    label: "Сотрудничество",
+  },
+};
+
+export function supportTicketConfig(config: TicketConfig): TicketConfig {
+  const configured = new Map(config.types.map((type) => [type.key, type]));
+  return ticketConfigSchema.parse({
+    ...config,
+    types: supportTicketTypeKeys.map(
+      (key) => configured.get(key) ?? supportTypeDefaults[key],
+    ),
+  });
+}
 
 export const defaultTicketConfig: TicketConfig = {
   allowReopen: true,
@@ -53,30 +98,5 @@ export const defaultTicketConfig: TicketConfig = {
   panelTitle: "Поддержка",
   staffRoleIds: [],
   transcriptEnabled: true,
-  types: [
-    {
-      description: "Помощь по серверу, доступу, ролям и другим вопросам.",
-      enabled: true,
-      key: "help",
-      label: "Помощь",
-    },
-    {
-      description: "Сообщить команде о нарушении со стороны участника.",
-      enabled: true,
-      key: "member-report",
-      label: "Жалоба на участника",
-    },
-    {
-      description: "Запросить пересмотр выданного наказания.",
-      enabled: true,
-      key: "punishment-appeal",
-      label: "Обжалование наказания",
-    },
-    {
-      description: "Предложить партнёрство или совместный проект.",
-      enabled: true,
-      key: "partnership",
-      label: "Сотрудничество",
-    },
-  ],
+  types: [...supportTicketTypeKeys.map((key) => supportTypeDefaults[key])],
 };

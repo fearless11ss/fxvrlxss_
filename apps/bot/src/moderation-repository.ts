@@ -1,4 +1,5 @@
 import type { ModerationAction } from "@fxvrlxss/domain/moderation-config";
+import type { ModerationAppealStatus } from "@fxvrlxss/domain/moderation-case";
 
 export interface ModerationEvidence {
   readonly automodAction?: string;
@@ -12,24 +13,25 @@ export interface ModerationEvidence {
 
 export interface ModerationCaseRecord {
   readonly appliedAction: ModerationAction;
-  readonly appealOutcome: "approved" | "denied" | "withdrawn" | null;
+  readonly appealStartedAt: Date | null;
+  readonly appealStatus: ModerationAppealStatus;
   readonly appealReason: string | null;
   readonly appealResolvedAt: Date | null;
   readonly appealResolvedById: string | null;
   readonly createdAt: Date;
   readonly evidence: ModerationEvidence;
-  readonly expiresAt: Date | null;
+  readonly consequenceEndsAt: Date | null;
   readonly guildId: string;
   readonly id: string;
   readonly moderatorId: string;
   readonly number: number;
   readonly points: number;
   readonly requestedAction: ModerationAction;
-  readonly resolutionReason: string | null;
-  readonly resolvedAt: Date | null;
-  readonly resolvedById: string | null;
+  readonly pointsExpireAt: Date | null;
+  readonly revocationReason: string | null;
+  readonly revokedAt: Date | null;
+  readonly revokedById: string | null;
   readonly sourceEventKey: string | null;
-  readonly status: "open" | "appealed" | "resolved";
   readonly summary: string;
   readonly timeoutMinutes: number | null;
   readonly userId: string;
@@ -44,11 +46,13 @@ export interface ModerationRepository {
   }): Promise<ModerationCaseRecord | null>;
   create(input: {
     readonly appliedAction: ModerationAction;
+    readonly createdAt: Date;
     readonly evidence: ModerationEvidence;
-    readonly expiresAt: Date;
+    readonly consequenceEndsAt: Date | null;
     readonly guildId: string;
     readonly moderatorId: string;
     readonly points: number;
+    readonly pointsExpireAt: Date;
     readonly requestedAction: ModerationAction;
     readonly sourceEventKey?: string;
     readonly summary: string;
@@ -62,22 +66,27 @@ export interface ModerationRepository {
     guildId: string,
     number: number,
   ): Promise<ModerationCaseRecord | null>;
+  endSanction(input: {
+    readonly action: "ban" | "quarantine" | "timeout";
+    readonly guildId: string;
+    readonly userId: string;
+  }): Promise<void>;
   listForUser(
     guildId: string,
     userId: string,
     limit: number,
   ): Promise<readonly ModerationCaseRecord[]>;
   finishAppeal(input: {
+    readonly actorId: string;
     readonly guildId: string;
     readonly number: number;
     readonly outcome: "approved" | "denied" | "withdrawn";
     readonly reason: string;
-    readonly resolvedById: string;
   }): Promise<ModerationCaseRecord | null>;
-  resolve(input: {
+  revoke(input: {
+    readonly actorId: string;
     readonly guildId: string;
     readonly number: number;
     readonly reason: string;
-    readonly resolvedById: string;
   }): Promise<ModerationCaseRecord | null>;
 }

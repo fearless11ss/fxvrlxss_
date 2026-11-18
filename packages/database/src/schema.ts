@@ -29,10 +29,12 @@ export const publicationStatus = pgEnum("publication_status", [
   "failed",
   "superseded",
 ]);
-export const moderationCaseStatus = pgEnum("moderation_case_status", [
-  "open",
-  "appealed",
-  "resolved",
+export const moderationAppealStatus = pgEnum("moderation_appeal_status", [
+  "none",
+  "pending",
+  "approved",
+  "denied",
+  "withdrawn",
 ]);
 export const ticketStatus = pgEnum("ticket_status", [
   "open",
@@ -115,7 +117,10 @@ export const moderationCases = pgTable(
     userId: text("user_id").notNull(),
     moderatorId: text("moderator_id").notNull(),
     sourceEventKey: text("source_event_key"),
-    status: moderationCaseStatus("status").default("open").notNull(),
+    appealStatus: moderationAppealStatus("appeal_status")
+      .default("none")
+      .notNull(),
+    appealStartedAt: timestamp("appeal_started_at", { withTimezone: true }),
     requestedAction: text("requested_action")
       .$type<"warn" | "timeout" | "kick" | "ban">()
       .notNull(),
@@ -126,16 +131,16 @@ export const moderationCases = pgTable(
     summary: text("summary").notNull(),
     evidence: jsonb("evidence").notNull(),
     timeoutMinutes: integer("timeout_minutes"),
-    expiresAt: timestamp("expires_at", { withTimezone: true }),
-    appealOutcome: text("appeal_outcome").$type<
-      "approved" | "denied" | "withdrawn"
-    >(),
+    pointsExpireAt: timestamp("points_expire_at", { withTimezone: true }),
+    consequenceEndsAt: timestamp("consequence_ends_at", {
+      withTimezone: true,
+    }),
     appealReason: text("appeal_reason"),
     appealResolvedAt: timestamp("appeal_resolved_at", { withTimezone: true }),
     appealResolvedById: text("appeal_resolved_by_id"),
-    resolvedById: text("resolved_by_id"),
-    resolutionReason: text("resolution_reason"),
-    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    revokedById: text("revoked_by_id"),
+    revocationReason: text("revocation_reason"),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
     ...timestamps,
   },
   (table) => [
@@ -145,12 +150,17 @@ export const moderationCases = pgTable(
       table.sourceEventKey,
     ),
     index("moderation_cases_user_idx").on(table.guildId, table.userId),
-    index("moderation_cases_status_idx").on(table.status),
+    index("moderation_cases_appeal_status_idx").on(table.appealStatus),
+    index("moderation_cases_consequence_idx").on(
+      table.guildId,
+      table.revokedAt,
+      table.consequenceEndsAt,
+    ),
     index("moderation_cases_active_points_idx").on(
       table.guildId,
       table.userId,
-      table.status,
-      table.expiresAt,
+      table.revokedAt,
+      table.pointsExpireAt,
     ),
   ],
 );

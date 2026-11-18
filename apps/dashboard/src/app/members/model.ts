@@ -1,3 +1,8 @@
+import {
+  moderationCaseLifecycle,
+  type ModerationAppealStatus,
+} from "@fxvrlxss/domain/moderation-case";
+
 import type { MemberFilters } from "./filters.js";
 
 export interface MemberProfileSource {
@@ -8,11 +13,13 @@ export interface MemberProfileSource {
 }
 
 export interface MemberCaseSource {
+  readonly appealStatus: ModerationAppealStatus;
+  readonly consequenceEndsAt: Date | null;
   readonly points: number;
-  readonly status: "appealed" | "open" | "resolved";
+  readonly pointsExpireAt: Date | null;
+  readonly revokedAt: Date | null;
   readonly updatedAt: Date;
   readonly userId: string;
-  readonly expiresAt: Date | null;
 }
 
 export interface MemberTicketSource {
@@ -99,11 +106,15 @@ export function buildMemberDirectory(
       member.lastActivityAt,
       moderationCase.updatedAt,
     );
-    if (moderationCase.status !== "resolved") {
+    if (moderationCaseLifecycle(moderationCase, input.now) === "active") {
       member.activeCaseCount += 1;
-      if (!moderationCase.expiresAt || moderationCase.expiresAt > input.now) {
-        member.activePoints += moderationCase.points;
-      }
+    }
+    if (
+      !moderationCase.revokedAt &&
+      moderationCase.pointsExpireAt &&
+      moderationCase.pointsExpireAt > input.now
+    ) {
+      member.activePoints += moderationCase.points;
     }
   }
   for (const ticket of input.tickets) {

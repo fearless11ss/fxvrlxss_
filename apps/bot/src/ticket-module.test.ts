@@ -93,7 +93,8 @@ describe("ticket Components V2", () => {
     expect(JSON.stringify(panel)).toContain("ticket:type");
     expect(JSON.stringify(panel)).toContain("Помощь");
     expect(JSON.stringify(panel)).toContain("Жалоба на участника");
-    expect(JSON.stringify(panel)).toContain("Обжалование наказания");
+    expect(JSON.stringify(panel)).toContain("Баг-репорт");
+    expect(JSON.stringify(panel)).not.toContain("Обжалование наказания");
     expect(JSON.stringify(panel)).toContain("Сотрудничество");
   });
 

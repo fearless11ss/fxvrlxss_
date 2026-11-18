@@ -6,6 +6,10 @@ import {
   moderationCases,
   tickets,
 } from "@fxvrlxss/database/schema";
+import {
+  moderationCaseLifecycle,
+  type ModerationAppealStatus,
+} from "@fxvrlxss/domain/moderation-case";
 import { and, desc, eq, like, or } from "drizzle-orm";
 
 import { getDatabase } from "../../lib/database";
@@ -27,19 +31,22 @@ const actionLabels = {
   warn: "Предупреждение",
 } as const;
 
-const caseStatusLabels = {
-  appealed: "Обжалуется",
-  open: "Активно",
-  resolved: "Завершено",
+const caseLifecycleLabels = {
+  active: "Действует",
+  completed: "Завершено",
+  revoked: "Отменено",
 } as const;
 
-const appealOutcomeLabels = {
+const appealStatusLabels: Readonly<Record<ModerationAppealStatus, string>> = {
   approved: "Апелляция одобрена",
   denied: "Апелляция отклонена",
+  none: "",
+  pending: "Обжалуется",
   withdrawn: "Апелляция отозвана",
-} as const;
+};
 
 const ticketTypeLabels: Readonly<Record<string, string>> = {
+  "bug-report": "Баг-репорт",
   help: "Помощь",
   "member-report": "Жалоба на участника",
   partnership: "Сотрудничество",
@@ -98,13 +105,14 @@ function text(value: unknown, fallback: string): string {
 function caseHistoryEntry(
   moderationCase: typeof moderationCases.$inferSelect,
 ): MemberHistoryEntry {
+  const lifecycle = moderationCaseLifecycle(moderationCase, new Date());
   const meta = [
     `Дело #${String(moderationCase.number).padStart(4, "0")}`,
-    caseStatusLabels[moderationCase.status],
+    caseLifecycleLabels[lifecycle],
   ];
   if (moderationCase.points > 0) meta.push(`+${moderationCase.points} балл.`);
-  if (moderationCase.appealOutcome) {
-    meta.push(appealOutcomeLabels[moderationCase.appealOutcome]);
+  if (moderationCase.appealStatus !== "none") {
+    meta.push(appealStatusLabels[moderationCase.appealStatus]);
   }
   const timeout =
     moderationCase.appliedAction === "timeout" && moderationCase.timeoutMinutes
@@ -118,8 +126,8 @@ function caseHistoryEntry(
     occurredAt: moderationCase.createdAt,
     summary: [
       moderationCase.summary,
-      moderationCase.resolutionReason
-        ? `Решение: ${moderationCase.resolutionReason}`
+      moderationCase.revocationReason
+        ? `Решение: ${moderationCase.revocationReason}`
         : "",
       moderationCase.appealReason
         ? `Апелляция: ${moderationCase.appealReason}`
@@ -128,7 +136,7 @@ function caseHistoryEntry(
       .filter(Boolean)
       .join("\n"),
     title: `${actionLabels[moderationCase.appliedAction]}${timeout}`,
-    tone: moderationCase.status === "resolved" ? "resolved" : "attention",
+    tone: lifecycle === "active" ? "attention" : "resolved",
   };
 }
 

@@ -305,34 +305,16 @@ export function appealTicketConfig(staffRoleIds: readonly string[]) {
     enabled: true,
     maxOpenTicketsPerUser: 1,
     panelDescription:
-      "Укажите номер дела из уведомления fxvrlxss_. Бот проверит, что дело активно и принадлежит вам.",
+      "Укажите номер дела из уведомления fxvrlxss_. Бот проверит владельца и наличие действующих последствий.",
     panelTitle: "Обжалование наказания",
     staffRoleIds: [...staffRoleIds],
     transcriptEnabled: true,
     types: [
       {
-        description: "Недоступно на сервере апелляций.",
-        enabled: false,
-        key: "help" as const,
-        label: "Помощь",
-      },
-      {
-        description: "Недоступно на сервере апелляций.",
-        enabled: false,
-        key: "member-report" as const,
-        label: "Жалоба на участника",
-      },
-      {
-        description: "Запросить пересмотр активного дела модерации.",
+        description: "Запросить пересмотр действующего дела модерации.",
         enabled: true,
         key: "punishment-appeal" as const,
         label: "Обжаловать наказание",
-      },
-      {
-        description: "Недоступно на сервере апелляций.",
-        enabled: false,
-        key: "partnership" as const,
-        label: "Сотрудничество",
       },
     ],
   };
@@ -363,6 +345,7 @@ export async function startAppealGuildCore(options: {
     guild: setup.guild,
     initialConfig: appealTicketConfig(setup.staffRoleIds),
     logger,
+    mode: "appeals",
     moderationAppeals: options.moderationAppeals,
     repository: options.repository,
     resources: setup.resources,

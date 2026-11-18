@@ -6,6 +6,7 @@ import {
 } from "@fxvrlxss/database/schema";
 import {
   defaultTicketConfig,
+  supportTicketConfig,
   ticketConfigSchema,
   type TicketConfig,
 } from "@fxvrlxss/domain/ticket-config";
@@ -95,7 +96,9 @@ export async function getTicketPageData(): Promise<{
   return {
     roles,
     snapshot: {
-      config: parsed.success ? parsed.data : defaultTicketConfig,
+      config: supportTicketConfig(
+        parsed.success ? parsed.data : defaultTicketConfig,
+      ),
       ...(row.failureReason ? { failureReason: row.failureReason } : {}),
       status: row.status,
       version: row.version,

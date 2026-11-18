@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import {
   defaultTicketConfig,
+  supportTicketConfig,
   ticketConfigSchema,
   type TicketConfig,
   type TicketTypeKey,
@@ -261,10 +262,14 @@ export function appealEligibilityMessage(
       return "По этому делу уже открыта апелляция.";
     case "already-reviewed":
       return "Апелляция по этому делу уже была рассмотрена. Повторное обжалование недоступно.";
-    case "closed":
-      return "Дело уже закрыто и больше не подлежит обжалованию.";
+    case "completed":
+      return "Наказание и баллы по этому делу уже закончились.";
     case "not-found":
-      return "Активное дело с таким номером не найдено или оно принадлежит другому участнику.";
+      return "Дело с таким номером не найдено или оно принадлежит другому участнику.";
+    case "revoked":
+      return "Дело уже отменено и не требует обжалования.";
+    case "window-expired":
+      return "С момента выдачи наказания прошло больше 30 дней.";
   }
 }
 
@@ -421,6 +426,7 @@ export class TicketModule implements TicketConfigurationApplier {
   readonly #guild: Guild;
   readonly #logger: Logger;
   readonly #moderationAppeals: ModerationAppealHandler | undefined;
+  readonly #mode: "appeals" | "support";
   readonly #repository: TicketRepository;
   readonly #resources: GuildResources;
   #config: TicketConfig = defaultTicketConfig;
@@ -432,6 +438,7 @@ export class TicketModule implements TicketConfigurationApplier {
     readonly initialConfig?: TicketConfig;
     readonly logger: Logger;
     readonly moderationAppeals?: ModerationAppealHandler;
+    readonly mode?: "appeals" | "support";
     readonly repository: TicketRepository;
     readonly resources: GuildResources;
   }) {
@@ -439,9 +446,10 @@ export class TicketModule implements TicketConfigurationApplier {
     this.#guild = options.guild;
     this.#logger = options.logger;
     this.#moderationAppeals = options.moderationAppeals;
+    this.#mode = options.mode ?? "support";
     this.#repository = options.repository;
     this.#resources = options.resources;
-    this.#config = ticketConfigSchema.parse(
+    const parsed = ticketConfigSchema.parse(
       options.initialConfig ?? {
         ...defaultTicketConfig,
         staffRoleIds: options.guild.roles.cache
@@ -453,6 +461,8 @@ export class TicketModule implements TicketConfigurationApplier {
           .map((role) => role.id),
       },
     );
+    this.#config =
+      this.#mode === "support" ? supportTicketConfig(parsed) : parsed;
   }
 
   async start(): Promise<void> {
@@ -469,7 +479,9 @@ export class TicketModule implements TicketConfigurationApplier {
   }
 
   async apply(config: TicketConfig): Promise<void> {
-    this.#config = ticketConfigSchema.parse(config);
+    const parsed = ticketConfigSchema.parse(config);
+    this.#config =
+      this.#mode === "support" ? supportTicketConfig(parsed) : parsed;
     await this.#ensurePanel();
     await this.#refreshControls();
   }
@@ -917,6 +929,7 @@ export class TicketModule implements TicketConfigurationApplier {
     }
 
     let channel: TextChannel | undefined;
+    let committed = false;
     try {
       channel = await this.#guild.channels.create({
         name: `тикет-${ticketNumber(reservation.record.number)}`,
@@ -972,6 +985,7 @@ export class TicketModule implements TicketConfigurationApplier {
           `Moderation case #${moderationCaseNumber} could not begin appeal`,
         );
       }
+      committed = true;
       await interaction.editReply(`Тикет создан: <#${channel.id}>`);
       await this.#audit.publish({
         actor: { id: interaction.user.id, kind: "user" },
@@ -983,9 +997,19 @@ export class TicketModule implements TicketConfigurationApplier {
         title: "Тикет открыт",
       });
     } catch (error) {
-      if (channel)
-        await channel.delete("Ticket creation failed").catch(() => undefined);
-      await this.#repository.abandon(reservation.record.id);
+      if (!committed) {
+        if (channel) {
+          await channel.delete("Ticket creation failed").catch(() => undefined);
+        }
+        await this.#repository.abandon(reservation.record.id);
+        await interaction
+          .editReply(
+            moderationCaseNumber === undefined
+              ? "Не удалось создать тикет. Попробуйте ещё раз."
+              : "Дело перестало быть доступно для обжалования. Обновите панель и проверьте номер.",
+          )
+          .catch(() => undefined);
+      }
       throw error;
     }
   }

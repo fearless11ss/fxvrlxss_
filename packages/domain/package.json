@@ -20,6 +20,10 @@
       "types": "./src/moderation-config.ts",
       "import": "./dist/moderation-config.js"
     },
+    "./moderation-case": {
+      "types": "./src/moderation-case.ts",
+      "import": "./dist/moderation-case.js"
+    },
     "./moderation-system-config": {
       "types": "./src/moderation-system-config.ts",
       "import": "./dist/moderation-system-config.js"
